@@ -6,8 +6,8 @@
 /bin/
 /dist/
 
-# Cache & instance data
-cache/
+# Cache & instance data (top-level only, not internal/cache/)
+/cache/
 *.db
 
 # Environment
