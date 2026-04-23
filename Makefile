@@ -1,0 +1,29 @@
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
+DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+LDFLAGS := -s -w \
+	-X 'github.com/swifty99/hactl/internal/cmd.version=$(VERSION)' \
+	-X 'github.com/swifty99/hactl/internal/cmd.commit=$(COMMIT)' \
+	-X 'github.com/swifty99/hactl/internal/cmd.date=$(DATE)'
+
+.PHONY: build lint test test-int test-matrix clean
+
+build:
+	go build -ldflags "$(LDFLAGS)" -o hactl ./cmd/hactl
+
+lint:
+	golangci-lint run ./...
+
+test:
+	go test ./... -count=1
+
+test-int:
+	go test ./... -tags=integration -count=1 -timeout 120s
+
+test-matrix:
+	@echo "Run via CI (see .github/workflows/ci.yml)"
+	@echo "Locally: make test-int"
+
+clean:
+	rm -f hactl hactl.exe
+	go clean -cache

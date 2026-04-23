@@ -1,0 +1,206 @@
+# hactl – Implementation Status
+
+> Live document updated per session. Phases 0–10 complete.  
+> **E2E VERIFIED**: All integration tests pass against real HA containers (Docker).  
+> **[Detailed phase history in `/memories/repo/hactl-phases-history.md`]**
+
+## Core Principles
+
+- Plan → Code → Test. No merging without passing lint + tests.
+- `golangci-lint run ./...` = 0 findings always.
+- slog logging from start. Security first: no secrets in repo, write-path always dry-run capable.
+
+---
+
+## ✓ Completed Phases 0–8
+
+| Phase | What | Status |
+|-------|------|--------|
+| 0 | Skeleton, cobra root, lint, CI | ✓ |
+| 1 | Config discovery, REST client, `health` | ✓ |
+| 2 | Formatters, stable IDs, WebSocket, `auto ls/show` | ✓ |
+| 3 | Trace condenser, log deduper, SQLite cache | ✓ |
+| 4 | Entity browsing, history resampling, anomalies, templates | ✓ |
+| 5 | Write-path (diff/apply/rollback), integration tests | ✓ |
+| 6 | Full E2E validation, golden files, faulty fixture | ✓ |
+| 7 | WS system_log fallback, health --json, realistic fixture | ✓ |
+| 8 | script run, label filter, domain filter, compact tables, script cache, stats | ✓ |
+| 9 | Registry API, attribute history, relationship crawler, discovery commands, write ops | ✓ |
+| 10 | Lovelace dashboard CLI (`dash`), LLM frontend design skill | ✓ |
+
+---
+
+## Current Metrics (2026-04-23)
+
+| Metric | Value |
+|--------|-------|
+| Unit tests | 199 ✓ |
+| Integration tests | 202 ✓ (0 failures) |
+| Contract tests | 7 ✓ |
+| Lint findings | 0 ✓ |
+| Build | `go build -o hactl.exe ./cmd/hactl` ✓ |
+| Commands | 18 groups (health, auto, script, trace, log, cache, ent, cc, tpl, issues, changes, rollback, version, label, area, floor, svc, dash) |
+| Fixtures | basic, faulty, realistic (3 HA containers) |
+| Docker | Docker Desktop 29.2.1, testcontainers-go v0.42.0 |
+| Last verified | HA 2026.4.3, full E2E with Docker |
+
+---
+
+## E2E Testing Notes
+
+### Docker Setup (Windows)
+- Docker Desktop must be running: `Start-Process "C:\Program Files\Docker\Docker\Docker Desktop.exe"`
+- Wait for daemon: poll `docker info` until "Server Version" appears
+- Pipe: `npipe:////./pipe/docker_engine`
+
+### Bugs Fixed During E2E Verification
+
+1. **Cobra --help flag leak** (`internal/cmd/root.go`): When any test called `--help`, cobra's internal bool flag stayed `true` on that subcommand's FlagSet across subsequent `RunWithOutput()` calls. Fixed with recursive `resetCobraFlags()` using `pflag.VisitAll` to reset every flag including cobra's built-in `--help`.
+
+2. **Trace trigger array unmarshal** (`internal/analyze/trace.go`): HA 2026.x returns trace trigger as JSON array (`["state"]`) not string. Changed `RawTraceMeta.Trigger` from `string` to `json.RawMessage` with `parseTrigger()` helper that handles string, array, or raw fallback.
+
+3. **Script run nonexistent entity** (`internal/cmd/script.go`): HA service API returns 200 even for nonexistent script entities. Added `GetState()` pre-check before `CallService`.
+
+4. **Realistic fixture timing** (`internal/integration/realistic_test.go`): HA container reports ready when `/api/onboarding` responds, but may still be in `NOT_RUNNING` state. Added `waitForRunning()` that polls `/api/config` until `state=RUNNING` before seeding history.
+
+5. **Deprecated group.set service** (`internal/integration/svc_test.go`): `group.set` removed in newer HA. Replaced with `persistent_notification.create`.
+
+6. **Condensed trace step type** (`internal/integration/realistic_test.go`): Test checked for `"condition"` but the step type constant is `"cond"`. Also accept PASS/FAIL result header as valid output.
+
+---
+
+## Known Bugs
+
+
+
+---
+
+## Phase 8 Details — Improvements & Usability
+
+### 8.1 `script run <id>` command
+Execute a Home Assistant script by ID. Accepts bare name or `script.` prefix.  
+`hactl script run morning_routine` → calls `script/turn_on` service.
+
+### 8.2 `auto ls --tag` label filtering
+Filter automations by label with `--tag <substring>` (case-insensitive match).  
+Labels column added to automation table output.
+
+### 8.3 `ent ls --domain` domain filtering
+Filter entities by exact domain: `hactl ent ls --domain sun`.  
+Combinable with existing positional pattern filter.
+
+### 8.4 Table column compression (compact mode)
+All `ls` commands use compact rendering: 1-space column separator, no trailing padding, skips empty trailing columns. Reduces token count in LLM contexts.
+
+### 8.5 Faulty & realistic script fixtures
+- `testdata/fixtures/faulty/scripts.yaml`: 3 scripts (broken_delay, error_service, working_toggle)
+- `testdata/fixtures/realistic/scripts.yaml`: 4 scripts (morning_routine, night_mode, guest_welcome, system_restart)
+
+### 8.6 Cache script traces
+`cache refresh` now fetches both automation and script traces. Script trace fetch failure is non-fatal (logged as warning).
+
+### 8.7 Token counter `--stats` flag
+`hactl --stats <any command>` appends a stats footer: bytes written + estimated token count (~4 chars/token). Stats go to stderr in binary, to writer in test mode.
+
+### 8.8 Integration tests
+~30 new integration tests covering all Phase 8 features across basic, faulty, and realistic fixtures. Golden capture tests for new domain filtering.
+
+---
+
+## Phase 9 Details — Registry API, Discovery & Relationships
+
+### 9.1 HA Registry WebSocket Commands
+New `internal/haapi/registry.go` with types for all 5 registries (entity, area, label, floor, device). New WS methods: `EntityRegistryList`, `AreaRegistryList`, `LabelRegistryList`, `FloorRegistryList`, `DeviceRegistryList`, `EntityRegistryUpdate`, `LabelRegistryCreate`. Private `sendCommand` helper for generic WS request/response. All methods link to HA source (`homeassistant/components/config/*_registry.py`).
+
+### 9.2 API Source URL Comments
+All HA API-touching files (`client.go`, `websocket.go`, `history.go`, `registry.go`) link to official HA GitHub sources for easy upgradability when HA changes its API.
+
+### 9.3 `ent hist --attr <attribute>`
+Attribute history from HA `/api/history/period/` with `minimal_response=false`. Parses `historyEntryFull` (includes `attributes` map), extracts named attribute via `toFloat64` (handles float64, json.Number, string). Resampled + rendered like numeric sensor history.
+
+### 9.4 Discovery Commands
+- `label ls` / `label create` — list and create HA labels (with --color, --icon, --description)
+- `area ls` — list areas with floor and label resolution
+- `floor ls` — list floors with level display
+
+### 9.5 Entity Enrichment
+`ent ls` and `ent show` now display area + labels columns from registry. New `--area` and `--label` flags for filtering. `registryContext` struct with `fetchRegistryContext()`, `areaName()`, `labelNames()` helpers (in `label.go`).
+
+### 9.6 `auto ls` / `script ls` Enrichment
+Both `auto ls` and `script ls` now show area + labels columns. Registry context fetched via WS alongside trace data.
+
+### 9.7 Write Operations
+- `ent set-label <entity> <label>...` — validates labels exist, merges with current entity labels, calls `EntityRegistryUpdate`
+- `ent set-area <entity> <area>` — resolves area name to area_id, calls `EntityRegistryUpdate`
+
+### 9.8 `ent related <entity_id>` — Relationship Crawler
+Discovers 4 relationship types: automation triggers/controls, device siblings, area neighbors, group memberships. Renders grouped table. Extracted helper functions for gocognit compliance.
+
+### 9.9 Testing
+- 28 new unit tests: WS registry tests (6), attribute history parsing (4), toFloat64 (1 table-driven), filterEntitiesByArea/Label (2), registryContext methods (2), plus existing patterns
+- 19 new integration tests: label ls/create, area ls, floor ls, ent related, WS registry list, WS label create+list, auto/script ls area/labels columns, golden file updates
+
+---
+
+## Next Steps (by Priority)
+
+### 1. Device Registry CLI (`device ls/show`)
+Device registry WS command already implemented (`DeviceRegistryList`). Add CLI commands to browse devices and their child entities.
+
+### 2. `ent set-label`/`ent set-area` for batch operations
+Current write ops work for single entities. Add `--pattern`/`--domain` support to apply labels/areas to multiple entities at once.
+
+### 3. Container Parallel Boot (Quick Win, ~15s saved)
+Start basic + faulty containers in parallel in TestMain instead of lazy-loading.
+
+### 4. CI Integration Tests (Infra)
+Add integration-tests job to `.github/workflows/ci.yml` with Docker-service.
+
+### 5. Supervisor API (Future)
+`hactl addon ls`, `hactl system info` via HA Supervisor API (HA OS only). Needs `X-Hassio-Token` instead of long-lived token.
+
+### 6. goreleaser (Optional)
+Multi-platform binaries, Homebrew tap if external usage planned.
+
+---
+
+## Real-World Investigation Learnings (2026-04-23)
+
+### Case: light.flur_lichtbalken_oben not dimming at night
+
+**Root cause found:** `automation.flur_licht_master` was disabled (state=`off`) since 2026-02-24. The brightness schedule (`licht_flur_helligkeit_im_tagesverlauf_anpassen`) correctly computed and wrote target brightness to `input_number.licht_flur_oben_helligkeit`, but the master automation that translates helper values into actual `light.turn_on` service calls was off — so the physical light stayed at its last-set brightness.
+
+**hactl workflow that found it:**
+1. `health` → no errors (1 call)
+2. `auto ls --failing` → nothing (1 call)  
+3. `auto ls --pattern flur --top 50` → `flur_licht_master state=off` immediately visible (1 call)
+4. `ent hist input_number.licht_flur_oben_helligkeit --since 24h` → confirmed schedule was running fine (1 call)
+
+Total: ~4 calls, ~300 tokens to root cause.
+
+**Gaps exposed:**
+- No attribute history for lights (brightness not tracked, only on/off)
+- Pattern engine doesn't support regex; `light.*flur` returned empty
+- `changes --since 24h` timed out (HA logbook API slow)
+- No "related entities" crawler — manual chaining required
+
+
+
+---
+
+## Reference
+
+- **modernc.org/sqlite** (CGO-free) → static binary, no C compiler
+- **Jinja eval via HA /api/template** → semantically correct, no Go port
+- **WS system_log/list + REST fallback** → structured + reliable
+- **Writes via Config-API only** → HA validates, no filesystem access
+- **slog** → stdlib, structured, no extra deps
+- **golangci-lint v2** → current version, v1 config incompatible
+
+---
+
+## Scope
+
+**In:** All read-commands, automations write-path, unit+integration+contract tests, golden files, faulty+realistic fixtures, CI-matrix, docs.
+
+**Out:** HA filesystem access, configuration.yaml editing, daemon-mode, goreleaser/Homebrew, regression corpus, heavy-fixture scaling.
