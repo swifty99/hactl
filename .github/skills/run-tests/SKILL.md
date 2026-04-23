@@ -31,18 +31,6 @@ make test-int
 
 Expected: 199 unit tests + 202 integration tests pass. The integration tests start a real Home Assistant container via Docker (Testcontainers).
 
-## If Tests Fail
-
-**Golden-file failures** (test names contain "Golden", or failures mention timestamp mismatches, path differences, or snapshot mismatches):
-
-These are expected after output changes. Do NOT ask the user — immediately run:
-
-```bash
-HACTL_UPDATE_GOLDEN=1 make test-int
-```
-
-Then report which files in `testdata/golden/` changed. Done.
-
 
 ## Unit Tests Only (no Docker)
 
