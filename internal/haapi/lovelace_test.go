@@ -69,10 +69,22 @@ func TestLovelaceConfig_RoundTrip(t *testing.T) {
 	if err := json.Unmarshal(out, &roundTripped); err != nil {
 		t.Fatalf("unmarshal round-tripped: %v", err)
 	}
-	views := roundTripped["views"].([]any)
-	view := views[0].(map[string]any)
-	cards := view["cards"].([]any)
-	card := cards[0].(map[string]any)
+	views, ok := roundTripped["views"].([]any)
+	if !ok {
+		t.Fatal("views is not []any")
+	}
+	view, ok := views[0].(map[string]any)
+	if !ok {
+		t.Fatal("view is not map[string]any")
+	}
+	cards, ok := view["cards"].([]any)
+	if !ok {
+		t.Fatal("cards is not []any")
+	}
+	card, ok := cards[0].(map[string]any)
+	if !ok {
+		t.Fatal("card is not map[string]any")
+	}
 	if card["custom_field"] != "preserved" {
 		t.Errorf("custom_field lost during round-trip: %v", card)
 	}

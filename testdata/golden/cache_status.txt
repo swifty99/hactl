@@ -1,4 +1,4 @@
 traces:  0 entries  <SIZE>
 logs:    <SIZE>
 synced:  traces=never  logs=never
-dir:     C:\Users\kipping\AppData\Local\Temp\hatest-<ID>\cache
+dir:     <TMPDIR>/hatest-<ID>/cache

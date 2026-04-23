@@ -319,39 +319,6 @@ func (ws *WSClient) LabelRegistryCreate(ctx context.Context, name, color, icon, 
 	return &entry, nil
 }
 
-// sendCommand sends a generic WS command and returns the raw result.
-func (ws *WSClient) sendCommand(ctx context.Context, cmdType string, params map[string]any) (json.RawMessage, error) {
-	_ = ctx
-
-	id := ws.nextID.Add(1)
-	msg := map[string]any{
-		"id":   id,
-		"type": cmdType,
-	}
-	maps.Copy(msg, params)
-
-	ws.mu.Lock()
-	err := ws.conn.WriteJSON(msg)
-	ws.mu.Unlock()
-	if err != nil {
-		return nil, fmt.Errorf("sending %s: %w", cmdType, err)
-	}
-
-	var resp wsResponse
-	if err := ws.conn.ReadJSON(&resp); err != nil {
-		return nil, fmt.Errorf("reading %s response: %w", cmdType, err)
-	}
-	if !resp.Success {
-		errMsg := errUnknown
-		if resp.Error != nil {
-			errMsg = resp.Error.Message
-		}
-		return nil, fmt.Errorf("%s failed: %s", cmdType, errMsg)
-	}
-
-	return resp.Result, nil
-}
-
 // DashboardList returns all Lovelace dashboard entries.
 // WS command: lovelace/dashboards/list
 func (ws *WSClient) DashboardList(ctx context.Context) ([]LovelaceDashboard, error) {
@@ -465,6 +432,39 @@ func (ws *WSClient) ResourceList(ctx context.Context) ([]LovelaceResource, error
 		return nil, fmt.Errorf("parsing resource list: %w", err)
 	}
 	return entries, nil
+}
+
+// sendCommand sends a generic WS command and returns the raw result.
+func (ws *WSClient) sendCommand(ctx context.Context, cmdType string, params map[string]any) (json.RawMessage, error) {
+	_ = ctx
+
+	id := ws.nextID.Add(1)
+	msg := map[string]any{
+		"id":   id,
+		"type": cmdType,
+	}
+	maps.Copy(msg, params)
+
+	ws.mu.Lock()
+	err := ws.conn.WriteJSON(msg)
+	ws.mu.Unlock()
+	if err != nil {
+		return nil, fmt.Errorf("sending %s: %w", cmdType, err)
+	}
+
+	var resp wsResponse
+	if err := ws.conn.ReadJSON(&resp); err != nil {
+		return nil, fmt.Errorf("reading %s response: %w", cmdType, err)
+	}
+	if !resp.Success {
+		errMsg := errUnknown
+		if resp.Error != nil {
+			errMsg = resp.Error.Message
+		}
+		return nil, fmt.Errorf("%s failed: %s", cmdType, errMsg)
+	}
+
+	return resp.Result, nil
 }
 
 func (ws *WSClient) connect(ctx context.Context) error {

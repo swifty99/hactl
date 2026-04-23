@@ -3,9 +3,11 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -176,19 +178,19 @@ func runDashShow(ctx context.Context, w io.Writer, urlPath string) error {
 
 	// Raw mode: output unmodified HA JSON
 	if flagDashRaw || flagJSON {
-		raw, err := ws.DashboardConfigRaw(ctx, urlPath)
-		if err != nil {
-			return fmt.Errorf("fetching dashboard config: %w", err)
+		raw, rawErr := ws.DashboardConfigRaw(ctx, urlPath)
+		if rawErr != nil {
+			return fmt.Errorf("fetching dashboard config: %w", rawErr)
 		}
 		if flagDashRaw {
-			_, err = w.Write(append(raw, '\n'))
-			return err
+			_, writeErr := w.Write(append(raw, '\n'))
+			return writeErr
 		}
 		// --json: pretty-print
 		var buf json.RawMessage
-		if err := json.Unmarshal(raw, &buf); err != nil {
-			_, err = w.Write(append(raw, '\n'))
-			return err
+		if unmarshalErr := json.Unmarshal(raw, &buf); unmarshalErr != nil {
+			_, writeErr := w.Write(append(raw, '\n'))
+			return writeErr
 		}
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
@@ -258,7 +260,7 @@ func runDashSave(ctx context.Context, w io.Writer, urlPath string) error {
 	var data []byte
 	var err error
 	if flagDashFile != "" {
-		data, err = os.ReadFile(flagDashFile)
+		data, err = os.ReadFile(filepath.Clean(flagDashFile))
 		if err != nil {
 			return fmt.Errorf("reading config file: %w", err)
 		}
@@ -271,7 +273,7 @@ func runDashSave(ctx context.Context, w io.Writer, urlPath string) error {
 
 	// Validate JSON
 	if !json.Valid(data) {
-		return fmt.Errorf("invalid JSON in config input")
+		return errors.New("invalid JSON in config input")
 	}
 
 	if !flagDashConfirm {
