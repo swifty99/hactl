@@ -9,9 +9,10 @@ import (
 
 // Set via -ldflags at build time.
 var (
-	version = "dev"
-	commit  = "none"
-	date    = "unknown"
+	version  = "dev"
+	commit   = "none"
+	date     = "unknown"
+	testedHA = "" // comma-separated HA versions tested against (e.g. "2026.4, 2026.3")
 )
 
 var versionCmd = &cobra.Command{
@@ -24,6 +25,9 @@ var versionCmd = &cobra.Command{
 
 func printVersion(w io.Writer) {
 	_, _ = fmt.Fprintf(w, "hactl %s (commit %s, built %s)\n", version, commit, date)
+	if testedHA != "" {
+		_, _ = fmt.Fprintf(w, "tested: HA %s\n", testedHA)
+	}
 }
 
 func init() {

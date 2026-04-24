@@ -15,7 +15,11 @@ var ha *hatest.Instance
 
 func TestMain(m *testing.M) {
 	var code int
-	ha, code = hatest.StartMain(m, hatest.WithFixture("basic"))
+	opts := []hatest.Option{hatest.WithFixture("basic")}
+	if img := os.Getenv("HACTL_HA_IMAGE"); img != "" {
+		opts = append(opts, hatest.WithImage(img))
+	}
+	ha, code = hatest.StartMain(m, opts...)
 	if code != 0 {
 		os.Exit(code)
 	}

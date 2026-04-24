@@ -1,0 +1,171 @@
+name: Auto Release
+
+on:
+  schedule:
+    # 5th of each month at 10:00 UTC — after HA's monthly release
+    - cron: "0 10 5 * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  # ---------- Job 1: compute versions ----------
+  versions:
+    name: Compute Versions
+    runs-on: ubuntu-latest
+    outputs:
+      prev-ha: ${{ steps.calc.outputs.prev_ha }}
+      prev-ha-image: ${{ steps.calc.outputs.prev_ha_image }}
+      next-tag: ${{ steps.calc.outputs.next_tag }}
+      next-version: ${{ steps.calc.outputs.next_version }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Calculate versions
+        id: calc
+        run: |
+          # Previous month HA version (e.g. 2026.3)
+          prev_ha=$(date -d "$(date +%Y-%m-01) -1 month" +%Y.%-m)
+          echo "prev_ha=${prev_ha}" >> "$GITHUB_OUTPUT"
+          echo "prev_ha_image=ghcr.io/home-assistant/home-assistant:${prev_ha}" >> "$GITHUB_OUTPUT"
+
+          # Latest hactl tag and next minor bump
+          latest=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          if [ -z "$latest" ]; then
+            echo "next_tag=v0.1.0" >> "$GITHUB_OUTPUT"
+            echo "next_version=0.1.0" >> "$GITHUB_OUTPUT"
+          else
+            # Parse major.minor.patch and bump minor
+            major=$(echo "$latest" | sed 's/^v//' | cut -d. -f1)
+            minor=$(echo "$latest" | sed 's/^v//' | cut -d. -f2)
+            next_minor=$((minor + 1))
+            echo "next_tag=v${major}.${next_minor}.0" >> "$GITHUB_OUTPUT"
+            echo "next_version=${major}.${next_minor}.0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check tag does not exist
+        run: |
+          tag="${{ steps.calc.outputs.next_tag }}"
+          if git rev-parse "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "::error::Tag ${tag} already exists — skipping auto-release"
+            exit 1
+          fi
+          echo "Tag ${tag} is available"
+
+  # ---------- Job 2: test matrix ----------
+  test:
+    name: Test (HA ${{ matrix.ha-version }})
+    needs: versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        ha-version: [stable, prev, dev]
+        include:
+          - ha-version: stable
+            image: ghcr.io/home-assistant/home-assistant:stable
+            required: true
+          - ha-version: prev
+            image: ${{ needs.versions.outputs.prev-ha-image }}
+            required: true
+          - ha-version: dev
+            image: ghcr.io/home-assistant/home-assistant:dev
+            required: false
+    continue-on-error: ${{ matrix.required == false }}
+    outputs:
+      stable-version: ${{ steps.detect.outputs.ha_version }}
+      prev-version: ${{ steps.detect.outputs.ha_version }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+
+      - name: Run integration tests
+        run: make test-int
+        env:
+          HACTL_HA_IMAGE: ${{ matrix.image }}
+
+      - name: Detect HA version from container
+        id: detect
+        if: always()
+        run: |
+          # The tested HA version is logged by testcontainers; extract from test output
+          # Fallback: use the image tag
+          tag=$(echo "${{ matrix.image }}" | sed 's|.*/home-assistant:||')
+          echo "ha_version=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Write version artifact
+        if: success()
+        run: echo "${{ steps.detect.outputs.ha_version }}" > "ha-version-${{ matrix.ha-version }}.txt"
+
+      - name: Upload version artifact
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ha-version-${{ matrix.ha-version }}
+          path: "ha-version-${{ matrix.ha-version }}.txt"
+
+  # ---------- Job 3: collect versions & release ----------
+  release:
+    name: Release
+    needs: [versions, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+
+      - name: Download version artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: ha-version-*
+          merge-multiple: true
+
+      - name: Collect tested HA versions
+        id: tested
+        run: |
+          versions=""
+          for f in ha-version-*.txt; do
+            [ -f "$f" ] || continue
+            v=$(cat "$f")
+            if [ -n "$versions" ]; then
+              versions="${versions}, ${v}"
+            else
+              versions="${v}"
+            fi
+          done
+          echo "tested_ha=${versions}" >> "$GITHUB_OUTPUT"
+          echo "Tested HA versions: ${versions}"
+
+      - name: Create and push tag
+        run: |
+          tag="${{ needs.versions.outputs.next-tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${tag}" -m "Auto-release ${tag} (tested: HA ${{ steps.tested.outputs.tested_ha }})"
+          git push origin "${tag}"
+
+      - uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+
+      - uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+
+      - uses: goreleaser/goreleaser-action@e24998b8b67b290c2fa8b7c14fcfa7de2c5c9b8c # v7.1.0
+        with:
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TESTED_HA: ${{ steps.tested.outputs.tested_ha }}

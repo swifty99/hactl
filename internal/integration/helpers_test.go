@@ -116,6 +116,7 @@ var (
 	reTimestamp  = regexp.MustCompile(`\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?(\.\d+)?([+-]\d{2}:?\d{2}|Z)?`)
 	reShortTime  = regexp.MustCompile(`\b\d{2}:\d{2}\b`)
 	reShortDate  = regexp.MustCompile(`\b\d{2}-\d{2} \d{2}:\d{2}\b`)
+	reSunState   = regexp.MustCompile(`above_horizon|below_horizon`)
 	reHAVersion  = regexp.MustCompile(`HA \d{4}\.\d+\.\d+`)
 	rePort       = regexp.MustCompile(`localhost:\d{4,5}`)
 	reTempPath   = regexp.MustCompile(`(?:[A-Z]:[^\s]*?|/[^\s]*?)hatest-\d+`)
@@ -136,6 +137,7 @@ func sanitizeGolden(s string) string {
 	s = reErrors.ReplaceAllString(s, "errors=<N>")
 	s = reHAState.ReplaceAllString(s, "state=<STATE>")
 	s = reCacheSize.ReplaceAllString(s, "<SIZE>")
+	s = reSunState.ReplaceAllString(s, "<SUN_STATE>")
 	return s
 }
 
