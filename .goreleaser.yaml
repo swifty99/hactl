@@ -60,6 +60,21 @@ signs:
     artifacts: checksum
     output: true
 
+homebrew_casks:
+  - repository:
+      owner: swifty99
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    name: hactl
+    homepage: https://github.com/swifty99/hactl
+    description: "Home Assistant CLI — built for agentic workflows"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/hactl"]
+          end
+
 release:
   github:
     owner: swifty99

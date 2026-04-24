@@ -1,5 +1,12 @@
 ## hactl
 
+[![CI](https://github.com/swifty99/hactl/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/swifty99/hactl/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/swifty99/hactl)](https://github.com/swifty99/hactl/releases/latest)
+[![Go Report Card](https://goreportcard.com/badge/github.com/swifty99/hactl)](https://goreportcard.com/report/github.com/swifty99/hactl)
+[![CodeQL](https://github.com/swifty99/hactl/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/swifty99/hactl/actions/workflows/codeql.yml)
+[![License](https://img.shields.io/github/license/swifty99/hactl)](LICENSE)
+[![Go](https://img.shields.io/github/go-mod/go-version/swifty99/hactl)](go.mod)
+
 # Home Assistant control, built for agentic workflows
 
 Stop burning tokens on raw APIs. **hactl** is purpose-built for LLM-driven control of Home Assistant: minimal payloads, precise queries, no structural noise.
@@ -36,11 +43,28 @@ Drop a `.env` with your token into a directory. Run. Done.
 ## Install
 
 ```bash
+# Homebrew (macOS / Linux)
+brew install swifty99/tap/hactl
+
+# Go
 go install github.com/swifty99/hactl/cmd/hactl@latest
-# or
+
+# Source
 git clone https://github.com/swifty99/hactl && cd hactl && make build
 ```
-Or just download the release.
+
+Pre-built binaries for Linux, macOS, and Windows (amd64/arm64) are attached to each [GitHub release](https://github.com/swifty99/hactl/releases/latest).
+
+### Verify release signatures
+
+All release checksums are signed with [cosign](https://github.com/sigstore/cosign) (keyless / OIDC).
+
+```bash
+cosign verify-blob \
+  --bundle checksums.txt.bundle \
+  --certificate checksums.txt.pem \
+  checksums.txt
+```
 
 ## Setup
 
