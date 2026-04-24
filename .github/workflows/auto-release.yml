@@ -80,7 +80,6 @@ jobs:
           - ha-version: dev
             image: ghcr.io/home-assistant/home-assistant:dev
             required: false
-    continue-on-error: ${{ matrix.required == false }}
     outputs:
       stable-version: ${{ steps.detect.outputs.ha_version }}
       prev-version: ${{ steps.detect.outputs.ha_version }}
@@ -91,7 +90,19 @@ jobs:
           go-version-file: go.mod
 
       - name: Run integration tests
+        if: matrix.required
         run: make test-int
+        env:
+          HACTL_HA_IMAGE: ${{ matrix.image }}
+
+      - name: Run integration tests (non-blocking)
+        if: '!matrix.required'
+        run: |
+          if make test-int; then
+            echo "::notice::HA dev integration tests passed"
+          else
+            echo "::warning::HA dev integration tests failed (non-blocking)"
+          fi
         env:
           HACTL_HA_IMAGE: ${{ matrix.image }}
 
