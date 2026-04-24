@@ -35,15 +35,57 @@ jobs:
       - run: make test
 
   test-integration:
-    name: Integration Tests
+    name: Integration Tests (HA ${{ matrix.ha-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        ha-version: [stable, prev, dev]
+        include:
+          - ha-version: stable
+            image: ghcr.io/home-assistant/home-assistant:stable
+            required: true
+          - ha-version: prev
+            image: ""  # computed below
+            required: true
+          - ha-version: dev
+            image: ghcr.io/home-assistant/home-assistant:dev
+            required: false
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: go.mod
-      - run: make test-int
+      - name: Compute previous HA version
+        if: matrix.ha-version == 'prev'
+        id: prev
+        run: |
+          prev_month=$(date -d "$(date +%Y-%m-01) -1 month" +%Y.%-m)
+          echo "image=ghcr.io/home-assistant/home-assistant:${prev_month}" >> "$GITHUB_OUTPUT"
+      - name: Set HA image
+        id: image
+        run: |
+          img="${{ matrix.image }}"
+          if [ -z "$img" ]; then
+            img="${{ steps.prev.outputs.image }}"
+          fi
+          echo "ha_image=${img}" >> "$GITHUB_OUTPUT"
+      - name: Run integration tests
+        if: matrix.required
+        run: make test-int
+        env:
+          HACTL_HA_IMAGE: ${{ steps.image.outputs.ha_image }}
+      - name: Run integration tests (non-blocking)
+        if: '!matrix.required'
+        run: |
+          if make test-int; then
+            echo "::notice::HA dev integration tests passed"
+          else
+            echo "::warning::HA dev integration tests failed (non-blocking)"
+          fi
+        env:
+          HACTL_HA_IMAGE: ${{ steps.image.outputs.ha_image }}
 
   govulncheck:
     name: Vulnerability Check

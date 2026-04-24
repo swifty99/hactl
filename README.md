@@ -1,6 +1,6 @@
-# hactl
+## hactl
 
-# hactl — Home Assistant control, built for agentic workflows
+# Home Assistant control, built for agentic workflows
 
 Stop burning tokens on raw APIs. **hactl** is purpose-built for LLM-driven control of Home Assistant: minimal payloads, precise queries, no structural noise.
 

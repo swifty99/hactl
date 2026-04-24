@@ -1,10 +1,12 @@
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
-DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+VERSION   ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT    ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
+DATE      ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+TESTED_HA ?=
 LDFLAGS := -s -w \
 	-X 'github.com/swifty99/hactl/internal/cmd.version=$(VERSION)' \
 	-X 'github.com/swifty99/hactl/internal/cmd.commit=$(COMMIT)' \
-	-X 'github.com/swifty99/hactl/internal/cmd.date=$(DATE)'
+	-X 'github.com/swifty99/hactl/internal/cmd.date=$(DATE)' \
+	-X 'github.com/swifty99/hactl/internal/cmd.testedHA=$(TESTED_HA)'
 
 .PHONY: build lint test test-int test-matrix clean
 
