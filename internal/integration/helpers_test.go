@@ -117,7 +117,7 @@ var (
 	reShortTime  = regexp.MustCompile(`\b\d{2}:\d{2}\b`)
 	reShortDate  = regexp.MustCompile(`\b\d{2}-\d{2} \d{2}:\d{2}\b`)
 	reSunState   = regexp.MustCompile(`above_horizon|below_horizon`)
-	reHAVersion  = regexp.MustCompile(`HA \d{4}\.\d+\.\d+`)
+	reHAVersion  = regexp.MustCompile(`HA \d{4}\.\d+\.\d+(\.\w+)?`)
 	rePort       = regexp.MustCompile(`localhost:\d{4,5}`)
 	reTempPath   = regexp.MustCompile(`(?:[A-Z]:[^\s]*?|/[^\s]*?)hatest-\d+`)
 	reErrors     = regexp.MustCompile(`errors=\d+`)
