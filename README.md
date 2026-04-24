@@ -61,8 +61,7 @@ All release checksums are signed with [cosign](https://github.com/sigstore/cosig
 
 ```bash
 cosign verify-blob \
-  --bundle checksums.txt.bundle \
-  --certificate checksums.txt.pem \
+  --bundle checksums.txt.sig \
   checksums.txt
 ```
 
