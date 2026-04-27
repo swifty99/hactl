@@ -57,7 +57,7 @@ func TestContract_APIErrorLog(t *testing.T) {
 // TestContract_APITemplate verifies /api/template accepts and renders templates.
 func TestContract_APITemplate(t *testing.T) {
 	out := runHactl(t, "tpl", "eval", "{{ 1 + 1 }}")
-	out = strings.TrimSpace(out)
+	out = strings.TrimSpace(stripTokenHeader(out))
 	if out != "2" {
 		t.Errorf("template eval '{{ 1 + 1 }}' = %q, want %q", out, "2")
 	}

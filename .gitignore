@@ -28,6 +28,7 @@ testdata/tmp
 unit_test_output.txt
 integration_test_output.txt
 test_output.log
+test_output.txt
 homeassistant
 
 # Backup directory

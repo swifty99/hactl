@@ -18,7 +18,7 @@ import (
 var healthCmd = &cobra.Command{
 	Use:   "health",
 	Short: "Show Home Assistant health overview",
-	Long:  "Displays HA version, recorder status, and error count.",
+	Long:  "Display HA version, recorder status, and error count.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runHealth(cmd.Context(), cmd.OutOrStdout())
 	},

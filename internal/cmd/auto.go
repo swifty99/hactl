@@ -23,7 +23,7 @@ import (
 
 var flagAutoFailing bool
 var flagAutoPattern string
-var flagAutoTag string
+var flagAutoLabel string
 var flagAutoFile string
 var flagAutoConfirm bool
 
@@ -74,8 +74,8 @@ var autoApplyCmd = &cobra.Command{
 
 func init() {
 	autoLsCmd.Flags().BoolVar(&flagAutoFailing, "failing", false, "show only automations with recent errors")
-	autoLsCmd.Flags().StringVar(&flagAutoPattern, "pattern", "", "glob pattern to filter automations (e.g. ess_*)")
-	autoLsCmd.Flags().StringVar(&flagAutoTag, "tag", "", "filter automations by label/tag (e.g. ess)")
+	autoLsCmd.Flags().StringVar(&flagAutoPattern, "pattern", "", "filter by name (substring or glob, e.g. ess_*)")
+	autoLsCmd.Flags().StringVar(&flagAutoLabel, "label", "", "filter automations by label (substring, e.g. ess)")
 	autoDiffCmd.Flags().StringVarP(&flagAutoFile, "file", "f", "", "local YAML file to diff/apply")
 	autoApplyCmd.Flags().StringVarP(&flagAutoFile, "file", "f", "", "local YAML file to apply")
 	autoApplyCmd.Flags().BoolVar(&flagAutoConfirm, "confirm", false, "actually write + reload (default is dry-run)")
@@ -160,8 +160,8 @@ func runAutoLs(ctx context.Context, w io.Writer) error {
 		rows = filterAutosByPattern(rows, flagAutoPattern)
 	}
 
-	if flagAutoTag != "" {
-		rows = filterAutosByTag(rows, flagAutoTag)
+	if flagAutoLabel != "" {
+		rows = filterAutosByTag(rows, flagAutoLabel)
 	}
 
 	if flagAutoFailing {

@@ -92,8 +92,9 @@ func runIssues(ctx context.Context, w io.Writer) error {
 	}
 
 	return tbl.Render(w, format.RenderOpts{
-		Top:  flagTop,
-		Full: flagFull,
-		JSON: flagJSON,
+		Top:     flagTop,
+		Full:    flagFull,
+		JSON:    flagJSON,
+		Compact: true,
 	})
 }

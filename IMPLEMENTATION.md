@@ -1,6 +1,6 @@
 # hactl – Implementation Status
 
-> Live document updated per session. Phases 0–10 complete.  
+> Live document updated per session. Phases 0–12 complete.  
 > **E2E VERIFIED**: All integration tests pass against real HA containers (Docker).  
 > **[Detailed phase history in `/memories/repo/hactl-phases-history.md`]**
 
@@ -27,19 +27,21 @@
 | 8 | script run, label filter, domain filter, compact tables, script cache, stats | ✓ |
 | 9 | Registry API, attribute history, relationship crawler, discovery commands, write ops | ✓ |
 | 10 | Lovelace dashboard CLI (`dash`), LLM frontend design skill | ✓ |
+| 11 | LLM-safe output: `[~N tok]` header, `--tokensmax` cap, `log show` field parsing | ✓ |
+| 12 | Token policy polish, CLI consistency streamlining | ✓ |
 
 ---
 
-## Current Metrics (2026-04-23)
+## Current Metrics (2026-04-27)
 
 | Metric | Value |
 |--------|-------|
-| Unit tests | 199 ✓ |
+| Unit tests | 212 ✓ |
 | Integration tests | 202 ✓ (0 failures) |
 | Contract tests | 7 ✓ |
 | Lint findings | 0 ✓ |
 | Build | `go build -o hactl.exe ./cmd/hactl` ✓ |
-| Commands | 18 groups (health, auto, script, trace, log, cache, ent, cc, tpl, issues, changes, rollback, version, label, area, floor, svc, dash) |
+| Commands | 19 groups (health, auto, script, trace, log, cache, ent, cc, tpl, issues, changes, rollback, version, label, area, floor, svc, dash, rtfm) |
 | Fixtures | basic, faulty, realistic (3 HA containers) |
 | Docker | Docker Desktop 29.2.1, testcontainers-go v0.42.0 |
 | Last verified | HA 2026.4.3, full E2E with Docker |
@@ -71,7 +73,52 @@
 
 ## Known Bugs
 
+*(none)*
 
+---
+
+## ✓ Phase 12: Token Policy Polish & CLI Consistency
+
+### 12.1 ✓ Hint specificity in `applyTokenPolicy`
+Command-specific truncation hints via `truncationHint(cmdPath)` in `root.go`. Maps:
+- `hactl log` → `--component`, `--errors`, `--unique`
+- `hactl ent ls` → `--domain`, `--area`, `--label`, `--pattern`
+- `hactl auto ls` / `script ls` → `--pattern`, `--label`, `--failing`
+- `hactl ent show --full` → remove `--full`
+- fallback → generic `--tokensmax=0` hint
+
+### 12.2 ✓ UTF-8 boundary safety in truncation
+`applyTokenPolicy` now walks backward with `utf8.Valid()` after computing byte limit, preventing mid-rune splits. Unit test with multi-byte `€` character.
+
+### 12.3 ✓ `ent show` default attribute summary
+When `!flagFull` and hidden attributes exist, prints `attributes: N total; use --full to see all`.
+
+### 12.4 ✓ CLI Consistency Streamlining
+
+**Bug fix:**
+- `resetSubcommandFlags()` now resets `flagLogErrors`, `flagLogUnique`, `flagLogComponent` (were missing, causing test pollution)
+
+**Flag unification:**
+- `auto ls --tag` renamed to `--label` (matches `ent ls --label`; both filter by HA registry labels)
+- `script ls` gained `--label` and `--failing` flags (feature parity with `auto ls`)
+- `--pattern` flag descriptions normalized: `"filter by name (substring or glob, e.g. <example>)"`
+
+**Compact rendering:**
+- `Compact: true` applied to all table renders: `cc ls`, `cc logs`, `changes`, `dash ls`, `dash resources`, `issues`, `ent hist`, `ent anomalies`, `log` (both deduped and regular)
+
+**Cosmetic fixes:**
+- `trace` Long description: "automation runs" → "automation and script runs"
+- `health` Long description: "Displays" → "Display" (imperative tense)
+- `cc ls` empty-state: "no custom components found" → "no custom components"
+
+### 12.5 Close GitHub issue #4
+**Checklist before PR:**
+- [x] `golangci-lint run ./...` = 0 findings
+- [x] Integration tests green (202 pass)
+- [x] Golden files updated (`testdata/golden/*.txt`)
+- [x] IMPLEMENTATION.md updated
+- [x] `docs/manual.md` updated (--tag → --label, new script flags)
+- [ ] PR created & issue #4 closed
 
 ---
 

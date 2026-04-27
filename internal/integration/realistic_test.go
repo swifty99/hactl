@@ -392,9 +392,9 @@ func TestRealisticTraceShowFull(t *testing.T) {
 		t.Fatal("expected trace ID in auto show output, got none")
 	}
 
-	// Show full trace â€” should be valid JSON
-	traceOut := runHactlDir(t, inst.Dir(), "trace", "show", traceID, "--full")
-	trimmed := strings.TrimSpace(traceOut)
+	// Show full trace — should be valid JSON
+	traceOut := runHactlDir(t, inst.Dir(), "trace", "show", traceID, "--full", "--tokensmax=0")
+	trimmed := strings.TrimSpace(stripTokenHeader(traceOut))
 	if !strings.HasPrefix(trimmed, "{") {
 		t.Fatalf("trace show --full expected JSON object, got: %.100s", trimmed)
 	}
@@ -583,7 +583,7 @@ func TestRealisticTplEvalSensor(t *testing.T) {
 func TestRealisticTplEvalHouseMode(t *testing.T) {
 	inst := getRealisticHA(t)
 	out := runHactlDir(t, inst.Dir(), "tpl", "eval", "{{ states('input_select.house_mode') }}")
-	trimmed := strings.TrimSpace(out)
+	trimmed := strings.TrimSpace(stripTokenHeader(out))
 	// Should be one of our defined options
 	validModes := []string{"home", "away", "sleep", "party"}
 	if !slices.Contains(validModes, trimmed) {

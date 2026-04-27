@@ -78,7 +78,7 @@ func runCCLs(ctx context.Context, w io.Writer) error {
 	}
 
 	if len(components) == 0 {
-		_, _ = fmt.Fprintln(w, "no custom components found")
+		_, _ = fmt.Fprintln(w, "no custom components")
 		return nil
 	}
 
@@ -94,9 +94,10 @@ func runCCLs(ctx context.Context, w io.Writer) error {
 	}
 
 	return tbl.Render(w, format.RenderOpts{
-		Top:  flagTop,
-		Full: flagFull,
-		JSON: flagJSON,
+		Top:     flagTop,
+		Full:    flagFull,
+		JSON:    flagJSON,
+		Compact: true,
 	})
 }
 
@@ -191,9 +192,10 @@ func renderLogEntriesSimple(w io.Writer, entries []analyze.LogEntry) error {
 	}
 
 	return tbl.Render(w, format.RenderOpts{
-		Top:  flagTop,
-		Full: flagFull,
-		JSON: flagJSON,
+		Top:     flagTop,
+		Full:    flagFull,
+		JSON:    flagJSON,
+		Compact: true,
 	})
 }
 

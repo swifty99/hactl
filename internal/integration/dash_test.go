@@ -119,10 +119,11 @@ func TestDashSaveRoundTrip(t *testing.T) {
 
 	// Read back raw and verify JSON round-trip
 	rawOut := runHactl(t, "dash", "show", "hactl-rt-test", "--raw")
-	if !json.Valid([]byte(rawOut)) {
+	rawJSON := stripTokenHeader(rawOut)
+	if !json.Valid([]byte(rawJSON)) {
 		t.Errorf("raw output is not valid JSON: %s", rawOut)
 	}
-	assertContains(t, rawOut, "hello from hactl")
+	assertContains(t, rawJSON, "hello from hactl")
 
 	// Clean up
 	runHactl(t, "dash", "delete", "hactl-rt-test", "--confirm")

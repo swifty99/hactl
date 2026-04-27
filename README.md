@@ -20,7 +20,7 @@ Stop burning tokens on raw APIs. **hactl** is purpose-built for LLM-driven contr
 - More: see [manual](docs/manual.md)
 
 ## Why it’s different
-- **Token-efficient by design**: trims responses to essentials (top/head logs, no bloated schemas)  
+- **Token-efficient by design**: every response starts with `[~N tok]`, capped at 500 tokens by default (`--tokensmax`)  
 - **On-target validation**: executes against the real Jinja engine — no mock layers  
 - **Deterministic safety**: rollback by default, explicit commit required  
 - **Low traffic footprint**: aggressive request caching, filesystem-backed  

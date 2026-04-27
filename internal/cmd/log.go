@@ -100,9 +100,10 @@ func renderDedupedLogs(w io.Writer, entries []analyze.LogEntry) error {
 	}
 
 	return tbl.Render(w, format.RenderOpts{
-		Top:  flagTop,
-		Full: flagFull,
-		JSON: flagJSON,
+		Top:     flagTop,
+		Full:    flagFull,
+		JSON:    flagJSON,
+		Compact: true,
 	})
 }
 
@@ -139,9 +140,10 @@ func renderLogEntries(w io.Writer, cfg *config.Config, entries []analyze.LogEntr
 	}
 
 	return tbl.Render(w, format.RenderOpts{
-		Top:  flagTop,
-		Full: flagFull,
-		JSON: flagJSON,
+		Top:     flagTop,
+		Full:    flagFull,
+		JSON:    flagJSON,
+		Compact: true,
 	})
 }
 
@@ -163,8 +165,15 @@ func runLogShow(_ context.Context, w io.Writer, logID string) error {
 	}
 
 	// key format: "timestamp|component|message"
-	_, _ = fmt.Fprintf(w, "id:    %s\n", logID)
-	_, _ = fmt.Fprintf(w, "entry: %s\n", key)
+	parts := strings.SplitN(key, "|", 3)
+	_, _ = fmt.Fprintf(w, "id:        %s\n", logID)
+	if len(parts) == 3 {
+		_, _ = fmt.Fprintf(w, "timestamp: %s\n", parts[0])
+		_, _ = fmt.Fprintf(w, "component: %s\n", parts[1])
+		_, _ = fmt.Fprintf(w, "message:   %s\n", parts[2])
+	} else {
+		_, _ = fmt.Fprintf(w, "entry:     %s\n", key)
+	}
 	return nil
 }
 

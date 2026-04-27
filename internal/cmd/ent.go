@@ -107,7 +107,7 @@ var entSetAreaCmd = &cobra.Command{
 }
 
 func init() {
-	entLsCmd.Flags().StringVar(&flagEntPattern, "pattern", "", "glob pattern to filter entities (e.g. sensor.wp_*)")
+	entLsCmd.Flags().StringVar(&flagEntPattern, "pattern", "", "filter by name (substring or glob, e.g. sensor.wp_*)")
 	entLsCmd.Flags().StringVar(&flagEntDomain, "domain", "", "filter entities by domain (e.g. sensor, binary_sensor)")
 	entLsCmd.Flags().StringVar(&flagEntArea, "area", "", "filter entities by area/room name (substring)")
 	entLsCmd.Flags().StringVar(&flagEntLabel, "label", "", "filter entities by label name (substring)")
@@ -272,6 +272,18 @@ func runEntShow(ctx context.Context, w io.Writer, entityID string) error {
 			default:
 				_, _ = fmt.Fprintf(w, "%-13s %v\n", k+":", v)
 			}
+		}
+	} else {
+		// Show hint if there are hidden attributes
+		numShown := 0
+		for _, k := range []string{"friendly_name", "unit_of_measurement", "device_class"} {
+			if _, ok := ent.Attributes[k]; ok {
+				numShown++
+			}
+		}
+		total := len(ent.Attributes)
+		if total > numShown {
+			_, _ = fmt.Fprintf(w, "attributes:   %d total; use --full to see all\n", total)
 		}
 	}
 
@@ -461,9 +473,10 @@ func runEntAnomalies(ctx context.Context, w io.Writer, entityID string) error {
 	}
 
 	return tbl.Render(w, format.RenderOpts{
-		Top:  flagTop,
-		Full: flagFull,
-		JSON: flagJSON,
+		Top:     flagTop,
+		Full:    flagFull,
+		JSON:    flagJSON,
+		Compact: true,
 	})
 }
 
@@ -654,9 +667,10 @@ func renderStateTimeline(w io.Writer, entityID string, changes []analyze.StateCh
 	}
 
 	return tbl.Render(w, format.RenderOpts{
-		Top:  flagTop,
-		Full: flagFull,
-		JSON: flagJSON,
+		Top:     flagTop,
+		Full:    flagFull,
+		JSON:    flagJSON,
+		Compact: true,
 	})
 }
 
@@ -707,9 +721,10 @@ func renderStateAnomalies(w io.Writer, entityID, instanceDir string, changes []a
 	}
 
 	return tbl.Render(w, format.RenderOpts{
-		Top:  flagTop,
-		Full: flagFull,
-		JSON: flagJSON,
+		Top:     flagTop,
+		Full:    flagFull,
+		JSON:    flagJSON,
+		Compact: true,
 	})
 }
 
@@ -760,9 +775,10 @@ func renderHistoryPoints(w io.Writer, entityID string, points []analyze.DataPoin
 	}
 
 	return tbl.Render(w, format.RenderOpts{
-		Top:  flagTop,
-		Full: flagFull,
-		JSON: flagJSON,
+		Top:     flagTop,
+		Full:    flagFull,
+		JSON:    flagJSON,
+		Compact: true,
 	})
 }
 
