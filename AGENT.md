@@ -8,6 +8,8 @@ Norms for everyone working on hactl — human or model.
 
 The only correct command for a full test run is `make test-int`. Docker must be running first.
 
+After unit tests are updated, run linter, fix, and test again.
+
 ## Working Principles
 
 **Plan before acting.** No change without a plan. Draft, review, then implement.

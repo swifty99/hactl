@@ -20,7 +20,7 @@ import (
 var traceCmd = &cobra.Command{
 	Use:   "trace",
 	Short: "Inspect automation traces",
-	Long:  "View condensed or full trace details for automation runs.",
+	Long:  "View condensed or full trace details for automation and script runs.",
 }
 
 var traceShowCmd = &cobra.Command{

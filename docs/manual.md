@@ -6,7 +6,7 @@
 
 hactl is a read-heavy CLI. Most commands query HA via REST/WebSocket, condense the result, and print compact text. One directory = one HA instance. All state lives in `.env` (credentials) + `cache/` (SQLite + JSONL).
 
-**Token budget:** Default output is ~100-300 tokens per call. Use `--full` or `--json` only when you need raw data. Add `--stats` to any command to see response size + estimated token count on stderr.
+**Token budget:** Every response starts with a `[~N tok]` header so agents know the cost before reading further. Default cap is 500 tokens (`--tokensmax=500`). Raise the cap (`--tokensmax=2000`) or remove it entirely (`--tokensmax=0`) when you need full output. Use `--full` or `--json` only when you need raw data. Add `--stats` to any command to see response size + estimated token count on stderr.
 
 ## Setup
 
@@ -40,7 +40,7 @@ hactl changes --since 24h     # logbook: what changed recently (state changes, a
 hactl auto ls                             # table: id, state, area, labels, runs_24h, errors, last_err
 hactl auto ls --failing                   # only automations with recent errors
 hactl auto ls --pattern ess_*             # glob/substring filter on automation ID
-hactl auto ls --tag victron               # filter by label/tag name
+hactl auto ls --label victron             # filter by label name (substring)
 hactl auto show climate_schedule          # config summary + last 5 traces with stable IDs
 hactl trace show trc:a7                   # condensed trace (trigger → condition → action, pass/fail)
 hactl trace show trc:a7 --full            # raw trace JSON
@@ -61,6 +61,8 @@ trc:a7  automation.climate_schedule  2026-04-16 09:42  FAIL
 ```bash
 hactl script ls                    # table: id, state, area, labels, runs_24h, errors, last_err
 hactl script ls --pattern kino     # glob/substring filter
+hactl script ls --label energy     # filter by label name (substring)
+hactl script ls --failing          # only scripts with recent errors
 hactl script show kino_start       # config summary + last 5 traces
 hactl script run kino_start        # execute script via script.turn_on
 ```
@@ -75,7 +77,7 @@ hactl ent ls --pattern sensor.wp_*        # glob/substring on entity_id
 hactl ent ls --domain sensor              # filter by domain
 hactl ent ls --area living                # filter by area name (substring)
 hactl ent ls --label energy               # filter by label name (substring)
-hactl ent show sensor.wp_vl               # state + key attributes + area + labels
+hactl ent show sensor.wp_vl               # state + key attributes + area + labels (+ hidden count)
 hactl ent show sensor.wp_vl --full        # + all attributes
 hactl ent hist sensor.wp_vl --since 7d    # ~50 resampled datapoints (time/value)
 hactl ent hist sensor.wp_vl --resample 5m # override bucket size
@@ -154,7 +156,7 @@ hactl dash resources                               # list custom card/CSS resour
 hactl log --errors                        # error-level entries only
 hactl log --errors --unique               # deduplicated, sorted by count
 hactl log --component zha                 # filter by component name (substring)
-hactl log show log:f2                     # full detail for a specific log entry
+hactl log show log:f2                     # full detail: timestamp, component, message
 
 hactl cc ls                               # installed custom components + versions
 hactl cc show hacs                        # CC details + entity count
@@ -172,6 +174,7 @@ hactl cache refresh                       # refresh everything
 hactl cache clear                         # wipe all local cache
 
 hactl version                             # version, commit, build date
+hactl rtfm                                # print this manual (for LLM self-teaching)
 ```
 
 ---
@@ -196,10 +199,14 @@ hactl ent ls --domain binary_sensor --area garage
 hactl ent ls --label energy --pattern sensor.*
 ```
 
-`auto ls` supports `--tag` to filter by label/tag name (uses HA entity registry labels):
+`auto ls` and `script ls` support `--label` to filter by label name (uses HA entity registry labels),
+and `--failing` to show only items with recent errors:
 
 ```bash
-hactl auto ls --tag victron               # automations tagged with label "victron"
+hactl auto ls --label victron             # automations with label "victron"
+hactl auto ls --failing                   # automations with recent trace errors
+hactl script ls --label energy            # scripts with label "energy"
+hactl script ls --failing                 # scripts with recent trace errors
 ```
 
 For broader entity discovery when you have an entity but want context:
@@ -212,12 +219,14 @@ hactl ent related sensor.wp_vl            # spiders automations, device siblings
 
 ## Output conventions
 
+- **Token header:** Every response starts with `[~N tok]` so you know the cost at a glance.
+- **Token cap:** Output is truncated at `--tokensmax` tokens (default 500). A command-specific hint is appended when truncation occurs (e.g. `log` suggests `--component`, `ent ls` suggests `--domain`). Use `--tokensmax=0` to disable. Use filters to reduce output rather than raising the cap.
 - **Tables:** one header line, one row per item. `…+N more` for overflow. Control with `--top`.
 - **Stable IDs:** `trc:a7`, `anom:g3`, `log:f2` — short, persistent in `cache/ids.json`. Safe to reference in follow-up calls.
 - **Timestamps:** short form (`09:42`, `04-16 09:42`). ISO only with `--full`.
 - **No decoration:** no emojis, no color (unless `--color`). Clean for parsing.
 - **JSON mode:** `--json` returns structured JSON. Use when extracting specific fields.
-- **`--stats`:** prints response size + estimated token count to stderr after any command.
+- **`--stats`:** prints raw response size + estimated token count to stderr after any command.
 
 ---
 
@@ -232,6 +241,7 @@ hactl ent related sensor.wp_vl            # spiders automations, device siblings
 | `--json` | off | JSON output |
 | `--color` | off | ANSI colors |
 | `--stats` | off | Print response size + token estimate to stderr |
+| `--tokensmax` | `500` | Cap output at N tokens; `0` = no cap |
 
 ---
 
@@ -270,14 +280,14 @@ hactl label ls
 hactl label create "Solar" --icon mdi:solar-power
 hactl ent ls --pattern sensor.solar_*
 hactl ent set-label sensor.solar_power solar
-hactl auto ls --tag solar
+hactl auto ls --label solar
 ```
 
 ### "Find and act on a group of automations"
 ```
 hactl auto ls --pattern victron
 hactl svc call automation.turn_off -d '{"entity_id":"automation.victron_charge"}'
-hactl auto ls --tag victron              # verify
+hactl auto ls --label victron            # verify
 ```
 
 ### "What broke in the last hour?"

@@ -10,7 +10,7 @@ import (
 
 func TestVersion(t *testing.T) {
 	out := runHactl(t, "version")
-	trimmed := strings.TrimSpace(out)
+	trimmed := strings.TrimSpace(stripTokenHeader(out))
 
 	// Should match pattern: hactl <version> (commit <hash>, built <date>)
 	re := regexp.MustCompile(`^hactl .+ \(commit .+, built .+\)$`)

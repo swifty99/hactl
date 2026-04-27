@@ -138,9 +138,9 @@ func TestAutoLsPatternSubstring(t *testing.T) {
 	assertContains(t, out, "climate_schedule")
 }
 
-func TestAutoLsTagNoMatch(t *testing.T) {
-	// --tag with a nonexistent tag should return only headers
-	out := runHactl(t, "auto", "ls", "--tag", "nonexistent_label_xyz")
+func TestAutoLsLabelNoMatch(t *testing.T) {
+	// --label with a nonexistent label should return only headers
+	out := runHactl(t, "auto", "ls", "--label", "nonexistent_label_xyz")
 	assertContains(t, out, "id") // header present
 	// Should not contain any automation IDs
 	entries := runHactlJSON[[]map[string]string](t, "auto", "ls")
@@ -149,7 +149,7 @@ func TestAutoLsTagNoMatch(t *testing.T) {
 	}
 }
 
-func TestAutoLsTagHelp(t *testing.T) {
+func TestAutoLsLabelHelp(t *testing.T) {
 	out := runHactl(t, "auto", "ls", "--help")
-	assertContains(t, out, "--tag")
+	assertContains(t, out, "--label")
 }

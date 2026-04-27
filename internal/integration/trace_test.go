@@ -97,9 +97,9 @@ func TestTraceShowFull(t *testing.T) {
 
 	traceID := waitForTrace(t, autoID)
 
-	traceOut := runHactl(t, "trace", "show", traceID, "--full")
+	traceOut := runHactl(t, "trace", "show", traceID, "--full", "--tokensmax=0")
 	// Full output should be valid JSON
-	trimmed := strings.TrimSpace(traceOut)
+	trimmed := strings.TrimSpace(stripTokenHeader(traceOut))
 	if !strings.HasPrefix(trimmed, "{") {
 		t.Errorf("trace show --full expected JSON object, got: %.100s", trimmed)
 	}

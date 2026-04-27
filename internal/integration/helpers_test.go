@@ -95,6 +95,15 @@ func runHactlLines(t *testing.T, args ...string) []string {
 	return lines
 }
 
+// stripTokenHeader removes the leading "[~N tok]\n" header line if present.
+// Use in tests that assert exact scalar output (e.g. tpl eval, version).
+func stripTokenHeader(s string) string {
+	if idx := strings.Index(s, "\n"); idx >= 0 && strings.HasPrefix(s, "[~") {
+		return s[idx+1:]
+	}
+	return s
+}
+
 // assertContains fails if s does not contain substr.
 func assertContains(t *testing.T, s, substr string) {
 	t.Helper()
@@ -122,11 +131,13 @@ var (
 	reTempPath   = regexp.MustCompile(`(?:[A-Z]:[^\s]*?|/[^\s]*?)hatest-\d+`)
 	reErrors     = regexp.MustCompile(`errors=\d+`)
 	reHAState    = regexp.MustCompile(`state=(RUNNING|NOT_RUNNING|STARTING|STOPPING)`)
-	reCacheSize  = regexp.MustCompile(`\d+(\.\d+)? (KB|MB|GB|B)\b`)
+	reCacheSize   = regexp.MustCompile(`\d+(\.\d+)? (KB|MB|GB|B)\b`)
+	reTokenHeader = regexp.MustCompile(`\[~\d+ tok\]`)
 )
 
 // sanitizeGolden replaces dynamic values with stable placeholders for golden-file comparison.
 func sanitizeGolden(s string) string {
+	s = reTokenHeader.ReplaceAllString(s, "[~XXX tok]")
 	s = reTimestamp.ReplaceAllString(s, "<TIMESTAMP>")
 	s = reShortDate.ReplaceAllString(s, "<DATE_TIME>")
 	s = reShortTime.ReplaceAllString(s, "<TIME>")

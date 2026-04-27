@@ -20,6 +20,8 @@ import (
 )
 
 var flagScriptPattern string
+var flagScriptLabel string
+var flagScriptFailing bool
 
 var scriptCmd = &cobra.Command{
 	Use:   "script",
@@ -57,7 +59,9 @@ var scriptRunCmd = &cobra.Command{
 }
 
 func init() {
-	scriptLsCmd.Flags().StringVar(&flagScriptPattern, "pattern", "", "filter scripts by substring or glob (e.g. kino)")
+	scriptLsCmd.Flags().StringVar(&flagScriptPattern, "pattern", "", "filter by name (substring or glob, e.g. kino)")
+	scriptLsCmd.Flags().StringVar(&flagScriptLabel, "label", "", "filter scripts by label (substring, e.g. ess)")
+	scriptLsCmd.Flags().BoolVar(&flagScriptFailing, "failing", false, "show only scripts with recent errors")
 	scriptCmd.AddCommand(scriptLsCmd, scriptShowCmd, scriptRunCmd)
 	rootCmd.AddCommand(scriptCmd)
 }
@@ -134,6 +138,14 @@ func runScriptLs(ctx context.Context, w io.Writer) error {
 
 	if flagScriptPattern != "" {
 		rows = filterScriptsByPattern(rows, flagScriptPattern)
+	}
+
+	if flagScriptLabel != "" {
+		rows = filterScriptsByLabel(rows, flagScriptLabel)
+	}
+
+	if flagScriptFailing {
+		rows = filterScriptsFailing(rows)
 	}
 
 	tbl := &format.Table{
@@ -306,6 +318,26 @@ func filterScriptsByPattern(rows []scriptRow, pattern string) []scriptRow {
 	result := make([]scriptRow, 0, len(rows))
 	for _, r := range rows {
 		if matchPattern(r.id, pattern) || matchPattern("script."+r.id, pattern) {
+			result = append(result, r)
+		}
+	}
+	return result
+}
+
+func filterScriptsByLabel(rows []scriptRow, label string) []scriptRow {
+	result := make([]scriptRow, 0, len(rows))
+	for _, r := range rows {
+		if strings.Contains(strings.ToLower(r.labels), strings.ToLower(label)) {
+			result = append(result, r)
+		}
+	}
+	return result
+}
+
+func filterScriptsFailing(rows []scriptRow) []scriptRow {
+	result := make([]scriptRow, 0, len(rows))
+	for _, r := range rows {
+		if r.errors > 0 {
 			result = append(result, r)
 		}
 	}
