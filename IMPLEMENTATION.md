@@ -118,7 +118,7 @@ When `!flagFull` and hidden attributes exist, prints `attributes: N total; use -
 - [x] Golden files updated (`testdata/golden/*.txt`)
 - [x] IMPLEMENTATION.md updated
 - [x] `docs/manual.md` updated (--tag → --label, new script flags)
-- [ ] PR created & issue #4 closed
+- [x] PR created & issue #4 closed
 
 ---
 
