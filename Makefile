@@ -8,7 +8,7 @@ LDFLAGS := -s -w \
 	-X 'github.com/swifty99/hactl/internal/cmd.date=$(DATE)' \
 	-X 'github.com/swifty99/hactl/internal/cmd.testedHA=$(TESTED_HA)'
 
-.PHONY: build lint test test-int test-matrix clean
+.PHONY: build lint test test-int test-companion test-matrix clean
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o hactl ./cmd/hactl
@@ -21,6 +21,9 @@ test:
 
 test-int:
 	go test ./... -tags=integration -count=1 -timeout 120s
+
+test-companion:
+	go test -tags=companion -v -count=1 -timeout 300s ./internal/companiontest/...
 
 test-matrix:
 	@echo "Run via CI (see .github/workflows/ci.yml)"
