@@ -228,6 +228,35 @@ For single tests. Registers t.Cleanup automatically.
 4. Use `runHactlErr(t, ...)` for tests that expect errors
 5. Use `runHactlJSON[T](t, ...)` for structured JSON validation
 6. Assert with `assertContains` / `assertNotContains` for readable failures
+
+## Companion Integration Tests
+
+Companion tests live in a separate package (`internal/companiontest/`) with build tag `companion`:
+
+| Command | What runs | Docker needed |
+|---------|-----------|---------------|
+| `make test-companion` | Companion API tests (16 tests) | Yes |
+
+### Architecture
+
+Uses Docker Compose (not testcontainers) with HA + companion on a shared volume:
+
+```
+internal/companiontest/
+  docker-compose.yaml  ← HA stable + companion (GHCR) on shared ha-config volume
+  main_test.go         ← TestMain: pull image, compose up, onboard, seed, run, compose down
+  companion_test.go    ← 13 endpoint tests (CRUD + security)
+  contract_test.go     ← 3 OpenAPI contract validation tests
+```
+
+### Image Source
+
+Companion image pulled from GHCR (`ghcr.io/swifty99/hactl_companion:0.2`).  
+Fallback: clone companion repo and `docker build` locally if pull fails.
+
+### Seeding
+
+`seedConfigFiles()` writes `template.yaml`, `scripts.yaml`, `automations.yaml` via the companion's WriteConfigFile API before tests run. This ensures CRUD tests have data to work with.
 7. For golden-file tests, use `assertGolden(t, "name", output)`
 8. For tests needing the faulty fixture, use `getFaultyHA(t)` + `runHactlDir`
 9. For direct API access, use `loadConfig(t)` to get URL + token

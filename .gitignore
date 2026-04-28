@@ -33,3 +33,6 @@ homeassistant
 
 # Backup directory
 backups/
+
+# Windows redirect artifact
+dev/null

@@ -1,8 +1,8 @@
 # hactl – Implementation Status
 
-> Live document updated per session. Phases 0–12 complete.  
+> Live document updated per session. Phases 0–13 complete.  
 > **E2E VERIFIED**: All integration tests pass against real HA containers (Docker).  
-> **[Detailed phase history in `/memories/repo/hactl-phases-history.md`]**
+> Companion v2 client verified against GHCR image (`ghcr.io/swifty99/hactl_companion:0.2`).
 
 ## Core Principles
 
@@ -29,21 +29,24 @@
 | 10 | Lovelace dashboard CLI (`dash`), LLM frontend design skill | ✓ |
 | 11 | LLM-safe output: `[~N tok]` header, `--tokensmax` cap, `log show` field parsing | ✓ |
 | 12 | Token policy polish, CLI consistency streamlining | ✓ |
+| 13 | Companion v2 client (YAML CRUD) + Docker integration tests | ✓ |
+| 14 | Config CLI + auto-discovery | ☐ |
 
 ---
 
-## Current Metrics (2026-04-27)
+## Current Metrics (2026-04-28)
 
 | Metric | Value |
 |--------|-------|
-| Unit tests | 212 ✓ |
+| Unit tests | 224 ✓ (200 existing + 24 companion client) |
 | Integration tests | 202 ✓ (0 failures) |
-| Contract tests | 7 ✓ |
+| Companion integration tests | 16 ✓ (13 endpoint + 3 contract) |
 | Lint findings | 0 ✓ |
-| Build | `go build -o hactl.exe ./cmd/hactl` ✓ |
+| Build | `go build ./...` ✓ |
 | Commands | 19 groups (health, auto, script, trace, log, cache, ent, cc, tpl, issues, changes, rollback, version, label, area, floor, svc, dash, rtfm) |
 | Fixtures | basic, faulty, realistic (3 HA containers) |
-| Docker | Docker Desktop 29.2.1, testcontainers-go v0.42.0 |
+| Docker | Docker Desktop, testcontainers-go v0.42.0 |
+| Companion | v0.2.0 (`ghcr.io/swifty99/hactl_companion:0.2`) |
 | Last verified | HA 2026.4.3, full E2E with Docker |
 
 ---
@@ -119,6 +122,61 @@ When `!flagFull` and hidden attributes exist, prints `attributes: N total; use -
 - [x] IMPLEMENTATION.md updated
 - [x] `docs/manual.md` updated (--tag → --label, new script flags)
 - [x] PR created & issue #4 closed
+
+---
+
+## ✓ Phase 13: Companion API Client v2 + Docker Integration Tests
+
+### 13.1 ✓ Companion Go Client (`internal/companion/`)
+- `types.go` — Response structs: `HealthResponse`, `ConfigFilesResponse`, `ConfigFileResponse`, `ConfigBlockResponse`, `ConfigWriteResponse`, `TemplateDefinition`, `TemplatesResponse`, `TemplateResponse`, `TemplateCreateResponse`, `ScriptDefinition`, `ScriptsResponse`, `ScriptResponse`, `ScriptCreateResponse`, `AutomationDefinition`, `AutomationsResponse`, `AutomationResponse`, `AutomationCreateResponse`, `ConfigDeleteResponse`
+- `client.go` — HTTP client: Bearer token auth, 3 retries with backoff on 5xx, 30s timeout. 15 typed CRUD methods + config file methods + health.
+- `client_test.go` — 24 unit tests with `httptest.NewServer` mocks
+
+### 13.2 ✓ Docker Integration Tests (`internal/companiontest/`)
+- `docker-compose.yaml` — HA stable + companion (`ghcr.io/swifty99/hactl_companion:0.2`) on shared network + named volume
+- `main_test.go` — TestMain lifecycle: pull GHCR image (fallback: local build) → compose up → poll HA → headless onboarding → poll companion → seed config files → run tests → compose down
+- `companion_test.go` — 13 live endpoint tests: Health, ListConfigFiles, ReadConfigFile, SecretsYamlDenied, PathTraversal, DryRun, WriteNewFile, ListTemplates, CreateAndGetTemplate, ListScriptDefs, CreateAndGetScript, ListAutomationDefs, CreateAndGetAutomation
+- `contract_test.go` — 3 OpenAPI contract tests: spec validation, all 10 paths covered, correct HTTP methods (20 operations)
+
+### 13.3 ✓ OpenAPI Contract (v2)
+- Vendored from companion repo → `testdata/companion-v1.yaml`
+- 10 paths / 20 operations (health + config CRUD + template/script/automation CRUD)
+- `!include` resolution on all reads (`resolve=true` param)
+
+### 13.4 ✓ Makefile
+- `test-companion` target: `go test -tags=companion -v -count=1 -timeout 300s ./internal/companiontest/...`
+
+### 13.5 Run Notes
+- Build tag `companion` (separate from `integration`) — different Docker lifecycle
+- Companion pulled from GHCR (`ghcr.io/swifty99/hactl_companion:0.2`); local build fallback if pull fails
+- HA onboarding duplicated from `hatest.go` (keeps packages independent, no testcontainers dep)
+- Config files seeded before tests (template.yaml, scripts.yaml, automations.yaml)
+- Full run: ~25s (pull cached + compose up + HA boot 10s + onboard 3s + seed 5s + tests <1s + teardown 3s)
+
+---
+
+## Phase 14: Config CLI + Auto-Discovery (Next)
+
+> Companion v2 client + integration tests completed in Phase 13 rewrite.  
+> Remaining: wire CLI commands to companion client, add auto-discovery.
+
+### 14.1 ✓ Companion Client v2
+Completed. 15 typed methods (template/script/automation CRUD), 24 unit tests, 16 Docker integration tests.
+
+### 14.2 Companion Auto-Discovery
+- Priority: explicit `COMPANION_URL` → WS `hassio/addon/info` → ingress URL
+- Graceful fallback when companion unavailable
+
+### 14.3 New hactl Commands (no companion)
+- `hactl config entries` — WS `config/entries`
+- `hactl config check` — existing `WSClient.CheckConfig()`
+- `hactl config reload <domain>` — `CallService(domain, "reload")`
+
+### 14.4 New hactl Commands (companion)
+- `hactl tpl ls/show/edit/create/rm` — template sensor YAML management
+- `hactl script def/edit/create/rm` — script YAML management
+- `hactl auto def/edit/create/rm` — automation YAML management
+- All writes: dry-run default, `--confirm` to apply, auto-reload after apply
 
 ---
 
