@@ -3,6 +3,8 @@ package cmd
 import (
 	"testing"
 	"time"
+
+	"github.com/swifty99/hactl/internal/haapi"
 )
 
 func TestParseSince_Hours(t *testing.T) {
@@ -180,6 +182,73 @@ func TestFilterAutosByTag_EmptyLabels(t *testing.T) {
 	result := filterAutosByTag(rows, "ess")
 	if len(result) != 0 {
 		t.Fatalf("expected 0 matches for empty labels, got %d", len(result))
+	}
+}
+
+func TestBuildAutoRows_RunsFromLogbook(t *testing.T) {
+	// Logbook count of 1500 must beat trace storage (HA caps at ~5/automation).
+	cutoff := time.Now().Add(-24 * time.Hour)
+	autos := []automationEntity{
+		{EntityID: "automation.storm", State: "on"},
+		{EntityID: "automation.quiet", State: "on"},
+	}
+	traces := haapi.TraceListResult{
+		"automation.storm": {
+			{Timestamp: haapi.TraceSummaryTimestamp{Start: time.Now().Add(-1 * time.Hour).Format(time.RFC3339Nano)}, Execution: "finished"},
+			{Timestamp: haapi.TraceSummaryTimestamp{Start: time.Now().Add(-30 * time.Minute).Format(time.RFC3339Nano)}, Execution: "error"},
+		},
+	}
+	fires := map[string]int{"automation.storm": 1500}
+
+	rows := buildAutoRows(autos, traces, fires, cutoff)
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+
+	stormIdx := -1
+	for i, r := range rows {
+		if r.id == "storm" {
+			stormIdx = i
+		}
+	}
+	if stormIdx < 0 {
+		t.Fatal("storm row missing")
+	}
+	if rows[stormIdx].runs != 1500 {
+		t.Errorf("storm runs = %d, want 1500 (logbook count, not trace count)", rows[stormIdx].runs)
+	}
+	if rows[stormIdx].errors != 1 {
+		t.Errorf("storm errors = %d, want 1 (still derived from traces)", rows[stormIdx].errors)
+	}
+}
+
+func TestBuildAutoRows_FallbackToTraceCountWhenLogbookMissing(t *testing.T) {
+	// Logbook fetch failed → fires == nil. Run count must fall back to in-window traces.
+	cutoff := time.Now().Add(-24 * time.Hour)
+	autos := []automationEntity{{EntityID: "automation.foo", State: "on"}}
+	traces := haapi.TraceListResult{
+		"automation.foo": {
+			{Timestamp: haapi.TraceSummaryTimestamp{Start: time.Now().Add(-1 * time.Hour).Format(time.RFC3339Nano)}, Execution: "finished"},
+			{Timestamp: haapi.TraceSummaryTimestamp{Start: time.Now().Add(-48 * time.Hour).Format(time.RFC3339Nano)}, Execution: "finished"}, // outside window
+		},
+	}
+
+	rows := buildAutoRows(autos, traces, nil, cutoff)
+	if rows[0].runs != 1 {
+		t.Errorf("runs = %d, want 1 (only one trace inside cutoff window)", rows[0].runs)
+	}
+}
+
+func TestBuildAutoRows_NoTracesNoFires(t *testing.T) {
+	cutoff := time.Now().Add(-24 * time.Hour)
+	autos := []automationEntity{{EntityID: "automation.idle", State: "on"}}
+
+	rows := buildAutoRows(autos, nil, map[string]int{}, cutoff)
+	if rows[0].runs != 0 {
+		t.Errorf("runs = %d, want 0", rows[0].runs)
+	}
+	if rows[0].errors != 0 {
+		t.Errorf("errors = %d, want 0", rows[0].errors)
 	}
 }
 

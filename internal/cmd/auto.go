@@ -147,7 +147,14 @@ func runAutoLs(ctx context.Context, w io.Writer) error {
 	}
 	cutoff := time.Now().Add(-sinceDur)
 
-	rows := buildAutoRows(autos, traces, cutoff)
+	// Fetch fire counts from logbook (traces are bounded per automation, so they
+	// undercount runs_24h dramatically for high-fire rules).
+	fires, fErr := fetchAutomationFireCounts(ctx, client, sinceDur)
+	if fErr != nil {
+		slog.Warn("could not fetch logbook fire counts; runs_24h will fall back to trace count", "error", fErr)
+	}
+
+	rows := buildAutoRows(autos, traces, fires, cutoff)
 
 	// Enrich with area from registry
 	if rc != nil {
@@ -292,6 +299,34 @@ func fetchAutomations(ctx context.Context, client *haapi.Client) ([]automationEn
 	return autos, nil
 }
 
+// fetchAutomationFireCounts pulls a window of logbook entries via REST and buckets
+// them by entity_id where domain == "automation". One logbook entry per fire
+// (HA records "Foo triggered by ..." for every actual run), so the count reflects
+// actual fires rather than the bounded trace storage.
+func fetchAutomationFireCounts(ctx context.Context, client *haapi.Client, since time.Duration) (map[string]int, error) {
+	now := time.Now()
+	startTime := now.Add(-since)
+	data, err := client.GetLogbook(ctx,
+		startTime.Format(time.RFC3339),
+		now.Format(time.RFC3339))
+	if err != nil {
+		return nil, fmt.Errorf("fetching logbook: %w", err)
+	}
+
+	var entries []logbookEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return nil, fmt.Errorf("parsing logbook: %w", err)
+	}
+
+	counts := make(map[string]int)
+	for _, e := range entries {
+		if e.Domain == "automation" && e.EntityID != "" {
+			counts[e.EntityID]++
+		}
+	}
+	return counts, nil
+}
+
 func fetchTraceList(ctx context.Context, cfg *config.Config) (haapi.TraceListResult, error) {
 	ws := haapi.NewWSClient(cfg.URL, cfg.Token)
 	if err := ws.Connect(ctx); err != nil {
@@ -306,10 +341,19 @@ func fetchTraceList(ctx context.Context, cfg *config.Config) (haapi.TraceListRes
 	return result, nil
 }
 
-func buildAutoRows(autos []automationEntity, traces haapi.TraceListResult, cutoff time.Time) []autoRow {
+// buildAutoRows combines per-automation state, fire counts, and trace data.
+//
+// Fire counts come from the logbook (fires map): one entry per actual run within
+// the cutoff window. If the logbook lookup failed (fires == nil or missing key),
+// runs falls back to the count of in-window traces.
+//
+// Traces still drive errors/lastErr because they carry execution status, but they
+// are bounded per automation by HA's stored_traces setting (default 5) and so
+// must not be used to derive runs.
+func buildAutoRows(autos []automationEntity, traces haapi.TraceListResult, fires map[string]int, cutoff time.Time) []autoRow {
 	rows := make([]autoRow, 0, len(autos))
 	for _, a := range autos {
-		// Use entity_id suffix as the display ID â€” this is what auto show/diff/apply accept.
+		// Use entity_id suffix as the display ID — this is what auto show/diff/apply accept.
 		id := strings.TrimPrefix(a.EntityID, "automation.")
 
 		row := autoRow{
@@ -319,6 +363,7 @@ func buildAutoRows(autos []automationEntity, traces haapi.TraceListResult, cutof
 		}
 
 		key := a.EntityID
+		traceRunsInWindow := 0
 		if ts, ok := traces[key]; ok {
 			row.traces = ts
 			for _, tr := range ts {
@@ -327,7 +372,7 @@ func buildAutoRows(autos []automationEntity, traces haapi.TraceListResult, cutof
 					continue
 				}
 				if t.After(cutoff) {
-					row.runs++
+					traceRunsInWindow++
 					if isTraceError(tr) {
 						row.errors++
 						if row.lastErr == "" {
@@ -336,6 +381,12 @@ func buildAutoRows(autos []automationEntity, traces haapi.TraceListResult, cutof
 					}
 				}
 			}
+		}
+
+		if n, ok := fires[key]; ok {
+			row.runs = n
+		} else {
+			row.runs = traceRunsInWindow
 		}
 
 		rows = append(rows, row)
