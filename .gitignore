@@ -36,3 +36,10 @@ backups/
 
 # Windows redirect artifact
 dev/null
+
+# Tuning loop runs (per-iteration scratch output)
+dev/tuning/runs/
+
+# Local Claude Code session state
+.claude/
+
