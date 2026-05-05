@@ -7,10 +7,10 @@ import (
 	"io"
 	"log/slog"
 	"slices"
-	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/swifty99/hactl/internal/analyze"
 	"github.com/swifty99/hactl/internal/config"
 	"github.com/swifty99/hactl/internal/haapi"
 )
@@ -80,13 +80,14 @@ func runHealth(ctx context.Context, w io.Writer) error {
 		recorderStatus = "ok"
 	}
 
-	// Fetch error log and count lines (non-fatal: some HA setups disable system_log)
+	// Fetch error log entries (WS system_log/list, REST /api/error_log fallback).
+	// Non-fatal: some HA setups disable system_log and newer HA dropped /api/error_log.
 	errorCount := -1
-	errLog, err := client.GetErrorLog(ctx)
+	entries, err := fetchLogEntries(ctx, cfg)
 	if err != nil {
 		slog.Warn("could not fetch error log", "error", err)
 	} else {
-		errorCount = countErrorLines(string(errLog))
+		errorCount = countErrorEntries(entries)
 	}
 
 	// Output
@@ -119,11 +120,11 @@ func runHealth(ctx context.Context, w io.Writer) error {
 	return nil
 }
 
-// countErrorLines counts lines containing ERROR in the HA error log.
-func countErrorLines(log string) int {
+// countErrorEntries counts entries logged at ERROR level.
+func countErrorEntries(entries []analyze.LogEntry) int {
 	count := 0
-	for line := range strings.SplitSeq(log, "\n") {
-		if strings.Contains(line, "ERROR") {
+	for _, e := range entries {
+		if e.Level == "ERROR" {
 			count++
 		}
 	}

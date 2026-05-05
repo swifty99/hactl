@@ -72,7 +72,7 @@ hactl script run kino_start        # execute script via script.turn_on
 ### Entities & history
 
 ```bash
-hactl ent ls                              # all entities (paged via --top)
+hactl ent ls                              # all entities
 hactl ent ls --pattern sensor.wp_*        # glob/substring on entity_id
 hactl ent ls --domain sensor              # filter by domain
 hactl ent ls --area living                # filter by area name (substring)
@@ -181,6 +181,8 @@ hactl rtfm                                # print this manual (for LLM self-teac
 
 ## Filtering & discovery
 
+> **Stop at the first miss.** If a pattern or entity ID returns empty or 404, report it and stop. Do not chain fallback patterns or broaden the search unless the user explicitly asks.
+
 Three commands support `--pattern` (glob or substring on the item ID):
 
 ```bash
@@ -236,7 +238,7 @@ hactl ent related sensor.wp_vl            # spiders automations, device siblings
 |------|---------|--------|
 | `--dir` | auto | Instance directory (overrides `HACTL_DIR` and auto-discovery) |
 | `--since` | `24h` | Time range (`1h`, `7d`, `30d`, …) |
-| `--top` | `10` | Max rows in tables |
+| `--top` | `10` | Max rows in tables (CLI only — not a tool kwarg; use filters instead) |
 | `--full` | off | Raw/verbose output |
 | `--json` | off | JSON output |
 | `--color` | off | ANSI colors |
@@ -247,10 +249,13 @@ hactl ent related sensor.wp_vl            # spiders automations, device siblings
 
 ## Agent workflows
 
+> **Rule:** Call `hactl rtfm` as the first tool call in every session. It prints the current manual so subsequent calls use accurate command syntax.
+
 ### "Why did my automation fail?"
 ```
-hactl health
 hactl auto ls --failing
+# if --failing is empty: check the error log for automation names
+hactl log --errors --unique
 hactl auto show <id>
 hactl trace show <trc:XX>
 ```
@@ -290,23 +295,20 @@ hactl svc call automation.turn_off -d '{"entity_id":"automation.victron_charge"}
 hactl auto ls --label victron            # verify
 ```
 
-### "What broke in the last hour?"
+### "What went wrong recently?" / "What broke?"
 ```
 hactl health
 hactl log --errors --unique
-hactl changes --since 1h
+hactl changes --since 24h
 ```
 
-### "Design or modify a dashboard"
+### "Build a dashboard" / "Design or modify a dashboard"
 ```
-hactl ent ls --json                        # discover available entities
-hactl area ls --json                       # rooms for grouping
-hactl dash ls                              # see existing dashboards
-hactl dash show my-dashboard --raw > /tmp/dash.json
-# ... modify JSON (add views, cards, sections) ...
-hactl dash save my-dashboard --file /tmp/dash.json          # dry-run
-hactl dash save my-dashboard --file /tmp/dash.json --confirm  # apply
-hactl dash show my-dashboard                                 # verify
+hactl ent ls --pattern <topic>             # discover entities (one call, stop here)
+# --- confirm with user before writing ---
+hactl dash create --url-path <path> --title "<title>" --icon mdi:home --confirm
+hactl dash save <path> --file dash.json --confirm
+hactl dash show <path>                     # verify
 ```
 
 ---

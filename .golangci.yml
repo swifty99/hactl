@@ -35,6 +35,7 @@ linters:
     - tagalign
     - gomoddirectives
     - noinlineerr
+    - goconst
 
   settings:
     govet:

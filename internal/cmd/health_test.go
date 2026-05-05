@@ -3,41 +3,43 @@ package cmd
 import (
 	"strings"
 	"testing"
+
+	"github.com/swifty99/hactl/internal/analyze"
 )
 
-func TestCountErrorLines(t *testing.T) {
+func TestCountErrorEntries(t *testing.T) {
 	tests := []struct {
-		name string
-		log  string
-		want int
+		name    string
+		entries []analyze.LogEntry
+		want    int
 	}{
 		{
-			name: "no errors",
-			log:  "INFO something\nWARNING mild\n",
-			want: 0,
+			name:    "no errors",
+			entries: []analyze.LogEntry{{Level: "INFO"}, {Level: "WARNING"}},
+			want:    0,
 		},
 		{
-			name: "two errors",
-			log:  "ERROR one\nINFO ok\nERROR two\n",
-			want: 2,
+			name:    "two errors",
+			entries: []analyze.LogEntry{{Level: "ERROR"}, {Level: "INFO"}, {Level: "ERROR"}},
+			want:    2,
 		},
 		{
-			name: "empty log",
-			log:  "",
-			want: 0,
+			name:    "empty",
+			entries: nil,
+			want:    0,
 		},
 		{
-			name: "error in middle of line",
-			log:  "2025-01-15 12:00:00 ERROR (MainThread) [ha] broke\n",
-			want: 1,
+			name:    "case-sensitive: only exact ERROR counts",
+			entries: []analyze.LogEntry{{Level: "ERROR"}, {Level: "error"}, {Level: "Error"}},
+			want:    1,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := countErrorLines(tt.log)
+			got := countErrorEntries(tt.entries)
 			if got != tt.want {
-				t.Errorf("countErrorLines() = %d, want %d", got, tt.want)
+				t.Errorf("countErrorEntries() = %d, want %d", got, tt.want)
 			}
 		})
 	}
