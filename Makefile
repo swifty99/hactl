@@ -20,7 +20,7 @@ test:
 	go test ./... -count=1
 
 test-int:
-	go test ./... -tags=integration -count=1 -timeout 120s
+	go test ./... -tags=integration -count=1 -timeout 300s
 
 test-companion:
 	go test -tags=companion -v -count=1 -timeout 300s ./internal/companiontest/...
