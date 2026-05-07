@@ -8,7 +8,7 @@ import (
 
 // FlowResult represents a response from the config entries flow API.
 type FlowResult struct {
-	DataSchema  []SchemaField     `json:"-"` // parsed from raw data_schema
+	DataSchema  []SchemaField     `json:"-"`
 	Errors      map[string]string `json:"errors,omitempty"`
 	Result      json.RawMessage   `json:"result,omitempty"`
 	FlowID      string            `json:"flow_id"`
@@ -21,10 +21,10 @@ type FlowResult struct {
 
 // SchemaField describes one field in a flow step's data schema.
 type SchemaField struct {
-	Name     string `json:"name"`
-	Required bool   `json:"required"`
-	Type     string `json:"type,omitempty"` // "string", "integer", "boolean", "float", "select", etc.
 	Default  any    `json:"default,omitempty"`
+	Name     string `json:"name"`
+	Type     string `json:"type,omitempty"` // "string", "integer", "boolean", "float", "select", etc.
+	Required bool   `json:"required"`
 }
 
 // flowRawResponse is the raw shape of the HA flow API response, used for parsing.
@@ -58,10 +58,10 @@ func parseFlowResult(data []byte) (*FlowResult, error) {
 
 	for _, fieldRaw := range raw.DataSchema {
 		var field struct {
-			Name     string `json:"name"`
-			Required bool   `json:"required"`
-			Type     string `json:"type"`
 			Default  any    `json:"default"`
+			Name     string `json:"name"`
+			Type     string `json:"type"`
+			Required bool   `json:"required"`
 		}
 		if err := json.Unmarshal(fieldRaw, &field); err == nil {
 			result.DataSchema = append(result.DataSchema, SchemaField{
