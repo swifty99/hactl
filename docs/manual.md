@@ -128,6 +128,33 @@ hactl svc call light.turn_on -d @payload.json   # read JSON from file (avoids qu
 
 Templates evaluated server-side by HA's Jinja engine — semantically correct, including `states()` and custom filters.
 
+### Config entries & flows
+
+```bash
+hactl config options <entry_id>                   # start options flow for an existing config entry
+hactl config flow-start <domain>                  # start a new config flow for a domain/integration
+hactl config flow-step <flow_id> --data '{...}'   # submit data to advance a flow step
+hactl config flow-inspect <flow_id>               # inspect current flow state (step, schema, errors)
+```
+
+Config flows are multi-step and stateful. An LLM agent driving integration setup uses this pattern:
+
+```bash
+# 1. Start a flow
+hactl config options abc123-entry-id --json
+# → {"flow_id":"xyz","type":"form","step_id":"init","data_schema":[...]}
+
+# 2. Submit data to advance
+hactl config flow-step xyz --data '{"action": "add_device"}' --json
+# → {"flow_id":"xyz","type":"form","step_id":"select_device","data_schema":[...]}
+
+# 3. Complete the flow
+hactl config flow-step xyz --data '{"device_type": "heat_pump"}' --json
+# → {"flow_id":"xyz","type":"create_entry","title":"Heat Pump"}
+```
+
+All `config` commands use HA's REST API directly — no companion needed. Add `--json` for structured output suitable for LLM consumption.
+
 ### Dashboards (Lovelace)
 
 ```bash
