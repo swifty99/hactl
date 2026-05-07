@@ -37,6 +37,10 @@ backups/
 # Windows redirect artifact
 dev/null
 
+# Auto-release workflow artifacts
+ha-version-*.txt
+release-notes.md
+
 # Tuning loop runs (per-iteration scratch output)
 dev/tuning/runs/
 
