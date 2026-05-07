@@ -104,8 +104,8 @@ func runConfigFlowStep(ctx context.Context, w io.Writer, flowID string) error {
 	client := haapi.New(cfg.URL, cfg.Token)
 
 	var rawData json.RawMessage
-	if err := json.Unmarshal([]byte(flagFlowData), &rawData); err != nil {
-		return fmt.Errorf("invalid --data JSON: %w", err)
+	if jsonErr := json.Unmarshal([]byte(flagFlowData), &rawData); jsonErr != nil {
+		return fmt.Errorf("invalid --data JSON: %w", jsonErr)
 	}
 
 	data, err := client.StepFlow(ctx, flowID, flagFlowOptions, rawData)

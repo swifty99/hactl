@@ -8,15 +8,15 @@ import (
 
 // FlowResult represents a response from the config entries flow API.
 type FlowResult struct {
+	DataSchema  []SchemaField     `json:"-"` // parsed from raw data_schema
+	Errors      map[string]string `json:"errors,omitempty"`
+	Result      json.RawMessage   `json:"result,omitempty"`
 	FlowID      string            `json:"flow_id"`
 	Type        string            `json:"type"` // "form", "create_entry", "abort", "external", "menu"
 	StepID      string            `json:"step_id"`
 	Handler     string            `json:"handler"`
 	Title       string            `json:"title"`
 	Description string            `json:"description_placeholders,omitempty"`
-	DataSchema  []SchemaField     `json:"-"` // parsed from raw data_schema
-	Errors      map[string]string `json:"errors,omitempty"`
-	Result      json.RawMessage   `json:"result,omitempty"`
 }
 
 // SchemaField describes one field in a flow step's data schema.
@@ -29,14 +29,14 @@ type SchemaField struct {
 
 // flowRawResponse is the raw shape of the HA flow API response, used for parsing.
 type flowRawResponse struct {
+	DataSchema []json.RawMessage `json:"data_schema"`
+	Errors     map[string]string `json:"errors"`
+	Result     json.RawMessage   `json:"result"`
 	FlowID     string            `json:"flow_id"`
 	Type       string            `json:"type"`
 	StepID     string            `json:"step_id"`
 	Handler    string            `json:"handler"`
 	Title      string            `json:"title"`
-	DataSchema []json.RawMessage `json:"data_schema"`
-	Errors     map[string]string `json:"errors"`
-	Result     json.RawMessage   `json:"result"`
 }
 
 // parseFlowResult converts raw JSON into a FlowResult with parsed schema.
