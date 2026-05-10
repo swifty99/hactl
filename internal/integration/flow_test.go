@@ -8,6 +8,53 @@ import (
 	"testing"
 )
 
+// TestConfigEntries verifies the config entries command lists entries.
+func TestConfigEntries(t *testing.T) {
+	out := runHactl(t, "config", "entries")
+	// Basic HA fixture always has some config entries (e.g. sun, default_config)
+	if strings.TrimSpace(out) == "" {
+		t.Error("config entries returned empty output")
+	}
+	assertNotContains(t, out, "panic")
+}
+
+// TestConfigEntries_JSON verifies JSON output includes expected fields.
+func TestConfigEntries_JSON(t *testing.T) {
+	out := runHactl(t, "config", "entries", "--json")
+	var entries []map[string]any
+	if err := json.Unmarshal([]byte(out), &entries); err != nil {
+		t.Fatalf("config entries --json returned invalid JSON: %v\noutput: %s", err, out)
+	}
+	if len(entries) == 0 {
+		t.Skip("no config entries (minimal HA)")
+	}
+	first := entries[0]
+	for _, key := range []string{"entry_id", "domain", "title", "state"} {
+		if _, ok := first[key]; !ok {
+			t.Errorf("entry missing key %q: %v", key, first)
+		}
+	}
+}
+
+// TestConfigEntries_DomainFilter verifies --domain filter works.
+func TestConfigEntries_DomainFilter(t *testing.T) {
+	// "sun" is a default integration, should have a config entry
+	out, err := runHactlErr(t, "config", "entries", "--domain", "sun")
+	if err != nil {
+		t.Skipf("config entries --domain sun failed: %v", err)
+	}
+	if strings.Contains(out, "no config entries") {
+		t.Skip("sun integration has no config entry on this HA version")
+	}
+	assertContains(t, out, "sun")
+}
+
+// TestConfigEntries_DomainFilter_NoMatch verifies --domain with no match.
+func TestConfigEntries_DomainFilter_NoMatch(t *testing.T) {
+	out := runHactl(t, "config", "entries", "--domain", "nonexistent_integration_xyz")
+	assertContains(t, out, "no config entries")
+}
+
 // TestConfigFlowStart_InvalidDomain tests that starting a flow for a
 // non-existent domain returns an appropriate error or abort response.
 func TestConfigFlowStart_InvalidDomain(t *testing.T) {

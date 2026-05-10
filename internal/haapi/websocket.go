@@ -420,6 +420,53 @@ func (ws *WSClient) LovelaceInfo(ctx context.Context) (*LovelaceInfo, error) {
 	return &info, nil
 }
 
+// IntegrationManifest holds the subset of an integration manifest we care about.
+type IntegrationManifest struct {
+	Domain    string `json:"domain"`
+	Name      string `json:"name"`
+	Version   string `json:"version,omitempty"`
+	IsBuiltIn bool   `json:"is_built_in"`
+}
+
+// IntegrationManifestList returns all loaded integration manifests via WS.
+// WS command: manifest/list
+// Source: https://github.com/home-assistant/core/blob/dev/homeassistant/components/config/integration.py
+func (ws *WSClient) IntegrationManifestList(ctx context.Context) ([]IntegrationManifest, error) {
+	result, err := ws.sendCommand(ctx, "manifest/list", nil)
+	if err != nil {
+		return nil, err
+	}
+	var entries []IntegrationManifest
+	if err := json.Unmarshal(result, &entries); err != nil {
+		return nil, fmt.Errorf("parsing manifest list: %w", err)
+	}
+	return entries, nil
+}
+
+// HassioAddonInfo holds the subset of Supervisor addon info we need for companion discovery.
+type HassioAddonInfo struct {
+	Ingress    bool   `json:"ingress"`
+	IngressURL string `json:"ingress_url"`
+	State      string `json:"state"`  // "started", "stopped", etc.
+	Version    string `json:"version"`
+}
+
+// HassioAddonInfo returns addon info from the Supervisor via WS.
+// WS command: hassio/addon/info
+// Only available on HA OS / Supervised installations.
+func (ws *WSClient) HassioAddonInfo(ctx context.Context, slug string) (*HassioAddonInfo, error) {
+	params := map[string]any{"slug": slug}
+	result, err := ws.sendCommand(ctx, "hassio/addon/info", params)
+	if err != nil {
+		return nil, err
+	}
+	var info HassioAddonInfo
+	if err := json.Unmarshal(result, &info); err != nil {
+		return nil, fmt.Errorf("parsing addon info: %w", err)
+	}
+	return &info, nil
+}
+
 // ResourceList returns all registered Lovelace resources.
 // WS command: lovelace/resources
 func (ws *WSClient) ResourceList(ctx context.Context) ([]LovelaceResource, error) {

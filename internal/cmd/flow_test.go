@@ -118,6 +118,36 @@ func TestRenderFlowResult_WithErrors(t *testing.T) {
 	}
 }
 
+func TestConfigEntries_NoEnv(t *testing.T) {
+	dir := t.TempDir()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"config", "entries", "--dir", dir})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), ".env") {
+		t.Errorf("error = %q, want it to mention .env", err.Error())
+	}
+}
+
+func TestConfigEntries_DomainFilter(t *testing.T) {
+	// Test that --domain flag is registered and accepted
+	dir := t.TempDir()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"config", "entries", "--domain", "mqtt", "--dir", dir})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error (no .env), got nil")
+	}
+	// The error should be about .env, not about unknown flag
+	if !strings.Contains(err.Error(), ".env") {
+		t.Errorf("error = %q, want .env error not flag error", err.Error())
+	}
+}
+
 func TestRenderFlowResult_JSON(t *testing.T) {
 	raw := `{"flow_id":"j1","type":"form","step_id":"init","handler":"test","data_schema":[]}`
 

@@ -16,7 +16,18 @@ import (
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Manage config entries and flows",
-	Long:  "Start, step through, and inspect config entry options flows and config flows.",
+	Long:  "List config entries and start, step through, and inspect config entry options flows and config flows.",
+}
+
+var flagConfigDomain string
+
+var configEntriesCmd = &cobra.Command{
+	Use:   "entries",
+	Short: "List config entries",
+	Long:  "List all config entries. Use --domain to filter by integration domain.",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runConfigEntries(cmd.Context(), cmd.OutOrStdout())
+	},
 }
 
 var configOptionsCmd = &cobra.Command{
@@ -45,8 +56,13 @@ var flagFlowOptions bool
 var configFlowStepCmd = &cobra.Command{
 	Use:   "flow-step <flow_id>",
 	Short: "Submit data to advance a flow",
-	Long:  "Submit data to advance a config/options flow to the next step. Use --options for options flows. Returns the next step or completion result.",
-	Args:  cobra.ExactArgs(1),
+	Long: `Submit data to advance a config/options flow to the next step.
+
+Use --options when stepping through an options flow (started via 'config options <entry_id>').
+Without --options, the step is sent to the config flow endpoint
+(/api/config/config_entries/flow/) instead of the options flow endpoint
+(/api/config/config_entries/options/flow/).`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runConfigFlowStep(cmd.Context(), cmd.OutOrStdout(), args[0])
 	},
@@ -55,19 +71,86 @@ var configFlowStepCmd = &cobra.Command{
 var configFlowInspectCmd = &cobra.Command{
 	Use:   "flow-inspect <flow_id>",
 	Short: "Inspect current flow state",
-	Long:  "Show the current step, expected schema fields, and any errors for a flow. Use --options for options flows.",
-	Args:  cobra.ExactArgs(1),
+	Long: `Show the current step, expected schema fields, and any errors for a flow.
+
+Use --options when inspecting an options flow (started via 'config options <entry_id>').
+Without --options, the inspect reads from the config flow endpoint instead of the options flow endpoint.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runConfigFlowInspect(cmd.Context(), cmd.OutOrStdout(), args[0])
 	},
 }
 
 func init() {
+	configEntriesCmd.Flags().StringVar(&flagConfigDomain, "domain", "", "filter entries by integration domain")
 	configFlowStepCmd.Flags().StringVar(&flagFlowData, "data", "{}", "JSON data to submit to the flow step")
 	configFlowStepCmd.Flags().BoolVar(&flagFlowOptions, "options", false, "use options flow endpoint (for existing config entries)")
 	configFlowInspectCmd.Flags().BoolVar(&flagFlowOptions, "options", false, "use options flow endpoint (for existing config entries)")
-	configCmd.AddCommand(configOptionsCmd, configFlowStartCmd, configFlowStepCmd, configFlowInspectCmd)
+	configCmd.AddCommand(configEntriesCmd, configOptionsCmd, configFlowStartCmd, configFlowStepCmd, configFlowInspectCmd)
 	rootCmd.AddCommand(configCmd)
+}
+
+// configEntry is the subset of a config entry we display.
+type configEntry struct {
+	EntryID string `json:"entry_id"`
+	Domain  string `json:"domain"`
+	Title   string `json:"title"`
+	State   string `json:"state"`
+	Version int    `json:"version"`
+}
+
+func runConfigEntries(ctx context.Context, w io.Writer) error {
+	cfg, err := config.Load(flagDir)
+	if err != nil {
+		return err
+	}
+	client := haapi.New(cfg.URL, cfg.Token)
+	data, err := client.GetConfigEntries(ctx)
+	if err != nil {
+		return fmt.Errorf("fetching config entries: %w", err)
+	}
+
+	var entries []configEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return fmt.Errorf("parsing config entries: %w", err)
+	}
+
+	// Filter by domain if requested
+	if flagConfigDomain != "" {
+		var filtered []configEntry
+		for _, e := range entries {
+			if e.Domain == flagConfigDomain {
+				filtered = append(filtered, e)
+			}
+		}
+		entries = filtered
+	}
+
+	if len(entries) == 0 {
+		_, _ = fmt.Fprintln(w, "no config entries")
+		return nil
+	}
+
+	tbl := &format.Table{
+		Headers: []string{"entry_id", "domain", "title", "state", "version"},
+		Rows:    make([][]string, len(entries)),
+	}
+	for i, e := range entries {
+		tbl.Rows[i] = []string{
+			e.EntryID,
+			e.Domain,
+			e.Title,
+			e.State,
+			fmt.Sprintf("%d", e.Version),
+		}
+	}
+
+	return tbl.Render(w, format.RenderOpts{
+		Top:     flagTop,
+		Full:    flagFull,
+		JSON:    flagJSON,
+		Compact: true,
+	})
 }
 
 func runConfigOptions(ctx context.Context, w io.Writer, entryID string) error {
@@ -89,9 +172,9 @@ func runConfigFlowStart(ctx context.Context, w io.Writer, domain string) error {
 		return err
 	}
 	client := haapi.New(cfg.URL, cfg.Token)
-	data, err := client.StartConfigFlow(ctx, domain)
+	data, err := client.StartConfigFlowOnce(ctx, domain)
 	if err != nil {
-		return fmt.Errorf("starting config flow: %w", err)
+		return fmt.Errorf("integration %q failed to load — check HA logs for import errors: %w", domain, err)
 	}
 	return renderFlowResult(w, data)
 }

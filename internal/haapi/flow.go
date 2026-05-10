@@ -90,6 +90,14 @@ func (c *Client) StartConfigFlow(ctx context.Context, domain string) ([]byte, er
 	return c.doPost(ctx, "/api/config/config_entries/flow", body)
 }
 
+// StartConfigFlowOnce is like StartConfigFlow but does not retry on 5xx.
+// When an integration fails to load (e.g. missing dependency), HA returns 500
+// and retrying just wastes time. Use this for interactive/CLI flows.
+func (c *Client) StartConfigFlowOnce(ctx context.Context, domain string) ([]byte, error) {
+	body := map[string]string{"handler": domain}
+	return c.doPostOnce(ctx, "/api/config/config_entries/flow", body)
+}
+
 // StepFlow submits data to advance a config/options flow.
 // If options is true: POST /api/config/config_entries/options/flow/<flow_id>
 // If options is false: POST /api/config/config_entries/flow/<flow_id>

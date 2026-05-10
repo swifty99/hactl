@@ -44,8 +44,8 @@ func assertGolden(t *testing.T, name, got string) {
 		t.Fatalf("reading golden file %s: %v (run with HACTL_UPDATE_GOLDEN=1 to create)", path, err)
 	}
 
-	want := strings.TrimRight(string(expected), "\r\n")
-	gotTrimmed := strings.TrimRight(sanitized, "\r\n")
+	want := strings.ReplaceAll(strings.TrimRight(string(expected), "\r\n"), "\r", "")
+	gotTrimmed := strings.ReplaceAll(strings.TrimRight(sanitized, "\r\n"), "\r", "")
 
 	if gotTrimmed != want {
 		t.Errorf("golden mismatch for %s\n--- want ---\n%s\n--- got ---\n%s",

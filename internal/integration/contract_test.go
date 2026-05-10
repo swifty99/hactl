@@ -3,9 +3,12 @@
 package integration
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/swifty99/hactl/internal/haapi"
 )
 
 // Contract tests verify that the HA API endpoints used by hactl
@@ -102,5 +105,56 @@ func TestContract_Logbook(t *testing.T) {
 		if !strings.Contains(out, "no changes") {
 			t.Fatalf("changes --json returned unexpected output: %s", out)
 		}
+	}
+}
+
+// TestContract_ConfigEntries verifies GET /api/config/config_entries/entry returns
+// an array of config entry objects with expected fields.
+func TestContract_ConfigEntries(t *testing.T) {
+	out := runHactl(t, "config", "entries", "--json")
+	var entries []map[string]any
+	if err := json.Unmarshal([]byte(out), &entries); err != nil {
+		t.Fatalf("config entries --json returned invalid JSON: %v\noutput: %s", err, out)
+	}
+	// HA always has at least some built-in config entries (e.g. sun)
+	if len(entries) == 0 {
+		t.Skip("no config entries returned (possible on minimal HA)")
+	}
+	first := entries[0]
+	for _, key := range []string{"entry_id", "domain", "title", "state"} {
+		if _, ok := first[key]; !ok {
+			t.Errorf("config entry missing expected key %q", key)
+		}
+	}
+}
+
+// TestContract_ManifestList verifies WS manifest/list returns integration manifests
+// with the expected fields (used by cc ls for custom component detection).
+func TestContract_ManifestList(t *testing.T) {
+	cfg := loadConfig(t)
+	ws := haapi.NewWSClient(cfg.URL, cfg.Token)
+	ctx := context.Background()
+	if err := ws.Connect(ctx); err != nil {
+		t.Fatalf("ws connect: %v", err)
+	}
+	defer func() { _ = ws.Close() }()
+
+	manifests, err := ws.IntegrationManifestList(ctx)
+	if err != nil {
+		t.Fatalf("manifest/list: %v", err)
+	}
+	if len(manifests) == 0 {
+		t.Fatal("manifest/list returned empty list")
+	}
+	// Verify at least one built-in integration exists
+	foundBuiltIn := false
+	for _, m := range manifests {
+		if m.IsBuiltIn && m.Domain != "" {
+			foundBuiltIn = true
+			break
+		}
+	}
+	if !foundBuiltIn {
+		t.Error("no built-in integrations found in manifest list")
 	}
 }

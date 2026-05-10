@@ -72,7 +72,7 @@ func runCCLs(ctx context.Context, w io.Writer) error {
 	}
 
 	client := haapi.New(cfg.URL, cfg.Token)
-	components, err := fetchCustomComponents(ctx, client)
+	components, err := fetchCustomComponents(ctx, cfg, client)
 	if err != nil {
 		return err
 	}
@@ -108,7 +108,7 @@ func runCCShow(ctx context.Context, w io.Writer, name string) error {
 	}
 
 	client := haapi.New(cfg.URL, cfg.Token)
-	components, err := fetchCustomComponents(ctx, client)
+	components, err := fetchCustomComponents(ctx, cfg, client)
 	if err != nil {
 		return err
 	}
@@ -200,23 +200,8 @@ func renderLogEntriesSimple(w io.Writer, entries []analyze.LogEntry) error {
 }
 
 // fetchCustomComponents gets custom_components from HA config.
-func fetchCustomComponents(ctx context.Context, client *haapi.Client) ([]ccInfo, error) {
-	configData, err := client.GetConfig(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("fetching HA config: %w", err)
-	}
-
-	var haCfg struct {
-		Components []string `json:"components"`
-	}
-	if unmarshalErr := json.Unmarshal(configData, &haCfg); unmarshalErr != nil {
-		return nil, fmt.Errorf("parsing HA config: %w", unmarshalErr)
-	}
-
-	// Custom components are typically in the components list but are third-party.
-	// HA doesn't directly expose "custom" vs "built-in" via config API.
-	// We identify custom components by looking for custom_components entries
-	// in the states. Components that are from HACS typically have version attributes.
+func fetchCustomComponents(ctx context.Context, cfg *config.Config, client *haapi.Client) ([]ccInfo, error) {
+	// Method 1: HACS update.* entities (provides version info)
 	statesData, err := client.GetStates(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("fetching states: %w", err)
@@ -231,7 +216,6 @@ func fetchCustomComponents(ctx context.Context, client *haapi.Client) ([]ccInfo,
 		return nil, fmt.Errorf("parsing states: %w", err)
 	}
 
-	// Look for update.* entities which track component versions (HACS pattern)
 	var components []ccInfo
 	seen := make(map[string]bool)
 	for _, s := range states {
@@ -244,7 +228,6 @@ func fetchCustomComponents(ctx context.Context, client *haapi.Client) ([]ccInfo,
 			continue
 		}
 		domain := strings.TrimPrefix(s.EntityID, "update.")
-		// Deduplicate
 		if seen[domain] {
 			continue
 		}
@@ -253,6 +236,31 @@ func fetchCustomComponents(ctx context.Context, client *haapi.Client) ([]ccInfo,
 			Domain:  domain,
 			Version: installedVersion,
 		})
+	}
+
+	// Method 2: WS manifest/list to find non-HACS custom components.
+	// Custom integrations loaded from custom_components/ (e.g. via volume mount)
+	// have is_built_in=false in their manifest but may lack HACS update entities.
+	ws := haapi.NewWSClient(cfg.URL, cfg.Token)
+	if wsErr := ws.Connect(ctx); wsErr == nil {
+		manifests, mErr := ws.IntegrationManifestList(ctx)
+		_ = ws.Close()
+		if mErr == nil {
+			for _, m := range manifests {
+				if m.IsBuiltIn || seen[m.Domain] {
+					continue
+				}
+				seen[m.Domain] = true
+				v := m.Version
+				if v == "" {
+					v = "n/a"
+				}
+				components = append(components, ccInfo{
+					Domain:  m.Domain,
+					Version: v,
+				})
+			}
+		}
 	}
 
 	return components, nil

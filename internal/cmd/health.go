@@ -7,10 +7,13 @@ import (
 	"io"
 	"log/slog"
 	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/swifty99/hactl/internal/analyze"
+	"github.com/swifty99/hactl/internal/companion"
 	"github.com/swifty99/hactl/internal/config"
 	"github.com/swifty99/hactl/internal/haapi"
 )
@@ -30,13 +33,15 @@ func init() {
 
 // healthResult holds structured health data for JSON output.
 type healthResult struct {
-	Version        string `json:"version"`
-	State          string `json:"state"`
-	RecorderStatus string `json:"recorder"`
-	LocationName   string `json:"location"`
-	TimeZone       string `json:"timezone"`
-	ErrorCount     int    `json:"errors"`
-	SafeMode       bool   `json:"safe_mode,omitempty"`
+	Version          string `json:"version"`
+	State            string `json:"state"`
+	RecorderStatus   string `json:"recorder"`
+	LocationName     string `json:"location"`
+	TimeZone         string `json:"timezone"`
+	ErrorCount       int    `json:"errors"`
+	SafeMode         bool   `json:"safe_mode,omitempty"`
+	CompanionVersion string `json:"companion_version,omitempty"`
+	CompanionStatus  string `json:"companion_status,omitempty"`
 }
 
 // haConfig holds the subset of /api/config we care about.
@@ -101,6 +106,11 @@ func runHealth(ctx context.Context, w io.Writer) error {
 		SafeMode:       haCfg.SafeMode,
 	}
 
+	// Companion discovery and health check (non-fatal)
+	companionStatus, companionVersion := discoverCompanion(ctx, cfg)
+	hr.CompanionStatus = companionStatus
+	hr.CompanionVersion = companionVersion
+
 	if flagJSON {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
@@ -114,7 +124,16 @@ func runHealth(ctx context.Context, w io.Writer) error {
 	}
 	_, _ = fmt.Fprintf(w, "location=%s  tz=%s\n", haCfg.LocationName, haCfg.TimeZone)
 	if haCfg.SafeMode {
-		_, _ = fmt.Fprintf(w, "âš  SAFE MODE ACTIVE\n")
+		_, _ = fmt.Fprintf(w, "⚠ SAFE MODE ACTIVE\n")
+	}
+
+	// Companion status line
+	if companionStatus != "" {
+		if companionVersion != "" {
+			_, _ = fmt.Fprintf(w, "companion=%s  version=%s\n", companionStatus, companionVersion)
+		} else {
+			_, _ = fmt.Fprintf(w, "companion=%s\n", companionStatus)
+		}
 	}
 
 	return nil
@@ -129,4 +148,80 @@ func countErrorEntries(entries []analyze.LogEntry) int {
 		}
 	}
 	return count
+}
+
+// discoverCompanion attempts to find and health-check the companion.
+// Returns (status, version). Non-fatal: returns ("not found", "") if unavailable.
+func discoverCompanion(ctx context.Context, cfg *config.Config) (string, string) {
+	ws := haapi.NewWSClient(cfg.URL, cfg.Token)
+	var wsConnected bool
+	if err := ws.Connect(ctx); err == nil {
+		wsConnected = true
+		defer func() { _ = ws.Close() }()
+	}
+
+	var wsClient *haapi.WSClient
+	if wsConnected {
+		wsClient = ws
+	}
+
+	companionURL, err := companion.Discover(ctx, cfg, wsClient)
+	if err != nil {
+		slog.Debug("companion discovery failed", "error", err)
+		return "not found", ""
+	}
+
+	// Health check
+	cc := companion.New(companionURL, cfg.Token)
+	health, err := cc.Health(ctx)
+	if err != nil {
+		slog.Debug("companion health check failed", "error", err)
+		return "unreachable", ""
+	}
+
+	status := health.Status
+	ver := health.Version
+
+	// Version compatibility check: warn if major version diff > 2
+	if ver != "" {
+		if warn := checkVersionCompat(version, ver); warn != "" {
+			slog.Warn(warn)
+			status += " (version mismatch)"
+		}
+	}
+
+	return status, ver
+}
+
+// checkVersionCompat compares hactl and companion major versions.
+// Returns a warning string if major versions differ by more than 2, empty otherwise.
+func checkVersionCompat(hactlVersion, companionVersion string) string {
+	hMajor := parseMajor(hactlVersion)
+	cMajor := parseMajor(companionVersion)
+	if hMajor < 0 || cMajor < 0 {
+		return ""
+	}
+	diff := hMajor - cMajor
+	if diff < 0 {
+		diff = -diff
+	}
+	if diff > 2 {
+		return fmt.Sprintf("companion version %s may be incompatible with hactl %s (major version diff: %d)", companionVersion, hactlVersion, diff)
+	}
+	return ""
+}
+
+// parseMajor extracts the major version number from a semver-like string.
+// Returns -1 if the version cannot be parsed.
+func parseMajor(v string) int {
+	v = strings.TrimPrefix(v, "v")
+	parts := strings.SplitN(v, ".", 2)
+	if len(parts) == 0 {
+		return -1
+	}
+	n, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return -1
+	}
+	return n
 }

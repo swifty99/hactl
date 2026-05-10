@@ -51,6 +51,11 @@ func (c *Client) GetStates(ctx context.Context) ([]byte, error) {
 	return c.doGet(ctx, "/api/states")
 }
 
+// GetConfigEntries calls GET /api/config/config_entries/entry and returns the raw JSON body.
+func (c *Client) GetConfigEntries(ctx context.Context) ([]byte, error) {
+	return c.doGet(ctx, "/api/config/config_entries/entry")
+}
+
 // GetErrorLog calls GET /api/error_log and returns the raw text body.
 func (c *Client) GetErrorLog(ctx context.Context) ([]byte, error) {
 	return c.doGet(ctx, "/api/error_log")
@@ -130,6 +135,51 @@ func (c *Client) doPost(ctx context.Context, path string, body any) ([]byte, err
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	return c.doWithRetry(req)
+}
+
+// doPostOnce is like doPost but does not retry on 5xx server errors.
+// Use for operations where retrying is harmful (e.g. config flow start that
+// hangs when the integration fails to load).
+func (c *Client) doPostOnce(ctx context.Context, path string, body any) ([]byte, error) {
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encoding request body: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(encoded))
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+	return c.doOnce(req)
+}
+
+// doOnce executes a request without retry. Returns immediately on error or non-2xx.
+func (c *Client) doOnce(req *http.Request) ([]byte, error) {
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "application/json")
+
+	start := time.Now()
+	resp, err := c.httpClient.Do(req) //nolint:gosec // URL is constructed from user-provided baseURL by design
+	duration := time.Since(start)
+
+	if err != nil {
+		slog.Debug("HTTP request failed", "method", req.Method, "error", err, "duration", duration)
+		return nil, fmt.Errorf("%s %s: %w", req.Method, req.URL.Path, err)
+	}
+
+	respBody, readErr := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+
+	slog.Debug("HTTP request", "method", req.Method, "status", resp.StatusCode, "duration", duration)
+
+	if readErr != nil {
+		return nil, fmt.Errorf("reading response body: %w", readErr)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("%s %s: %d %s", req.Method, req.URL.Path, resp.StatusCode, http.StatusText(resp.StatusCode))
+	}
+
+	return respBody, nil
 }
 
 func (c *Client) doWithRetry(req *http.Request) ([]byte, error) {

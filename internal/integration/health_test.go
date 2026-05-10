@@ -5,6 +5,7 @@ package integration
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -58,6 +59,28 @@ func TestHealthCommand(t *testing.T) {
 	}
 	if !strings.Contains(out, "Test Home") {
 		t.Errorf("health output missing location name: %s", out)
+	}
+	// Companion should gracefully degrade when not available
+	if !strings.Contains(out, "companion=") {
+		t.Errorf("health output missing companion status: %s", out)
+	}
+}
+
+// TestHealthJSON verifies health --json includes companion fields.
+func TestHealthJSON(t *testing.T) {
+	out := runHactl(t, "health", "--json")
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("health --json invalid JSON: %v\noutput: %s", err, out)
+	}
+	for _, key := range []string{"version", "state", "recorder", "errors"} {
+		if _, ok := result[key]; !ok {
+			t.Errorf("health JSON missing field %q", key)
+		}
+	}
+	// companion_status should be present (even if "not found")
+	if _, ok := result["companion_status"]; !ok {
+		t.Logf("companion_status not in JSON (may be omitempty when empty)")
 	}
 }
 

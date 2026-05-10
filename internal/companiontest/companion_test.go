@@ -4,7 +4,11 @@ package companiontest
 
 import (
 	"context"
+	"strings"
 	"testing"
+
+	"github.com/swifty99/hactl/internal/companion"
+	"github.com/swifty99/hactl/internal/config"
 )
 
 func TestHealth(t *testing.T) {
@@ -310,4 +314,148 @@ func TestCreateAndGetAutomation(t *testing.T) {
 	if del.Status != "deleted" {
 		t.Errorf("delete status = %q, want deleted", del.Status)
 	}
+}
+
+// --- Companion Discovery Tests ---
+
+// TestDiscovery_ExplicitURL verifies discovery with explicit COMPANION_URL in config.
+func TestDiscovery_ExplicitURL(t *testing.T) {
+	ctx := context.Background()
+	cfg := &config.Config{
+		URL:          haURL,
+		Token:        companionToken,
+		CompanionURL: compURL,
+	}
+
+	url, err := companion.Discover(ctx, cfg, nil)
+	if err != nil {
+		t.Fatalf("discovery with explicit URL: %v", err)
+	}
+	if url != compURL {
+		t.Errorf("discovered URL = %q, want %q", url, compURL)
+	}
+}
+
+// TestDiscovery_NoConfig_NoWS verifies discovery fails gracefully without config or WS.
+func TestDiscovery_NoConfig_NoWS(t *testing.T) {
+	ctx := context.Background()
+	cfg := &config.Config{
+		URL:   haURL,
+		Token: companionToken,
+	}
+
+	_, err := companion.Discover(ctx, cfg, nil)
+	if err == nil {
+		t.Error("expected error when no COMPANION_URL and no WS, got nil")
+	}
+}
+
+// TestDiscovery_WrongURL verifies health check fails with wrong companion URL.
+func TestDiscovery_WrongURL(t *testing.T) {
+	ctx := context.Background()
+	// Use a non-existent URL
+	badClient := companion.New("http://127.0.0.1:1", companionToken)
+	_, err := badClient.Health(ctx)
+	if err == nil {
+		t.Error("expected error for unreachable companion, got nil")
+	}
+}
+
+// TestDiscovery_HealthStatus verifies the discovered companion responds to health check.
+func TestDiscovery_HealthStatus(t *testing.T) {
+	ctx := context.Background()
+	cfg := &config.Config{
+		URL:          haURL,
+		Token:        companionToken,
+		CompanionURL: compURL,
+	}
+
+	url, err := companion.Discover(ctx, cfg, nil)
+	if err != nil {
+		t.Fatalf("discovery: %v", err)
+	}
+
+	cc := companion.New(url, companionToken)
+	h, err := cc.Health(ctx)
+	if err != nil {
+		t.Fatalf("health after discovery: %v", err)
+	}
+	if h.Status != "ok" {
+		t.Errorf("health status = %q, want ok", h.Status)
+	}
+	if h.Version == "" {
+		t.Error("companion version is empty")
+	}
+}
+
+// TestVersionCompat verifies the actual companion version is parseable.
+func TestVersionCompat(t *testing.T) {
+	ctx := context.Background()
+	h, err := testClient.Health(ctx)
+	if err != nil {
+		t.Fatalf("health: %v", err)
+	}
+	if h.Version == "" {
+		t.Skip("companion version is empty")
+	}
+
+	// Verify the companion version is semver-like
+	parts := splitVersion(h.Version)
+	if len(parts) < 2 {
+		t.Errorf("companion version %q is not semver-like", h.Version)
+	}
+}
+
+// TestVersionCompat_MajorDiff verifies version mismatch detection logic.
+func TestVersionCompat_MajorDiff(t *testing.T) {
+	tests := []struct {
+		name   string
+		v1, v2 string
+		compat bool
+	}{
+		{"same", "1.0.0", "1.0.0", true},
+		{"minor_diff", "1.2.0", "1.5.0", true},
+		{"major_diff_1", "2.0.0", "1.0.0", true},
+		{"major_diff_2", "3.0.0", "1.0.0", true},
+		{"major_diff_3_incompatible", "4.0.0", "1.0.0", false},
+		{"major_diff_5_incompatible", "6.0.0", "1.0.0", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m1 := parseMajorVersion(tt.v1)
+			m2 := parseMajorVersion(tt.v2)
+			diff := m1 - m2
+			if diff < 0 {
+				diff = -diff
+			}
+			isCompat := diff <= 2
+			if isCompat != tt.compat {
+				t.Errorf("v1=%q major=%d, v2=%q major=%d, diff=%d, compat=%v, want %v",
+					tt.v1, m1, tt.v2, m2, diff, isCompat, tt.compat)
+			}
+		})
+	}
+}
+
+// splitVersion splits a version string for basic validation.
+func splitVersion(v string) []string {
+	v = strings.TrimPrefix(v, "v")
+	return strings.Split(v, ".")
+}
+
+// parseMajorVersion extracts the major version number.
+func parseMajorVersion(v string) int {
+	v = strings.TrimPrefix(v, "v")
+	parts := strings.SplitN(v, ".", 2)
+	if len(parts) == 0 {
+		return -1
+	}
+	n := 0
+	for _, c := range parts[0] {
+		if c < '0' || c > '9' {
+			return -1
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
 }

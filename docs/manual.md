@@ -15,6 +15,9 @@ HA_URL=http://homeassistant.local:8123
 HA_TOKEN=<long_lived_access_token>
 ```
 
+> **Windows users:** Use `HA_URL=http://127.0.0.1:8123` instead of `localhost`.
+> Windows may resolve `localhost` to `::1` (IPv6), but HA typically listens on `0.0.0.0` (IPv4 only), causing connection failures.
+
 Point hactl at the directory containing `.env`:
 ```bash
 export HACTL_DIR=/path/to/instance   # or
