@@ -2,7 +2,7 @@ package companion
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"log/slog"
 	"strings"
 
@@ -39,5 +39,5 @@ func Discover(ctx context.Context, cfg *config.Config, ws *haapi.WSClient) (stri
 		}
 	}
 
-	return "", fmt.Errorf("companion not found: set COMPANION_URL in .env or install hactl-companion add-on")
+	return "", errors.New("companion not found: set COMPANION_URL in .env or install hactl-companion add-on")
 }

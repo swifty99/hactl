@@ -528,7 +528,7 @@ func (ws *WSClient) connect(ctx context.Context) error {
 
 	slog.Debug("connecting to HA websocket", "url", u.String())
 
-	conn, _, err := websocket.DefaultDialer.DialContext(ctx, u.String(), nil) //nolint:bodyclose // websocket manages connection
+	conn, _, err := websocket.DefaultDialer.DialContext(ctx, u.String(), nil) //nolint:bodyclose // websocket upgrade; resp.Body not applicable
 	if err != nil {
 		return fmt.Errorf("connecting to websocket: %w", err)
 	}

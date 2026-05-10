@@ -162,14 +162,14 @@ func (c *Client) doOnce(req *http.Request) ([]byte, error) {
 	duration := time.Since(start)
 
 	if err != nil {
-		slog.Debug("HTTP request failed", "method", req.Method, "error", err, "duration", duration)
+		slog.Debug("HTTP request failed", "method", req.Method, "error", err, "duration", duration) //nolint:gosec // structured log
 		return nil, fmt.Errorf("%s %s: %w", req.Method, req.URL.Path, err)
 	}
 
 	respBody, readErr := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 
-	slog.Debug("HTTP request", "method", req.Method, "status", resp.StatusCode, "duration", duration)
+	slog.Debug("HTTP request", "method", req.Method, "status", resp.StatusCode, "duration", duration) //nolint:gosec // structured log
 
 	if readErr != nil {
 		return nil, fmt.Errorf("reading response body: %w", readErr)

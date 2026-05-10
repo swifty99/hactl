@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
@@ -141,7 +142,7 @@ func runConfigEntries(ctx context.Context, w io.Writer) error {
 			e.Domain,
 			e.Title,
 			e.State,
-			fmt.Sprintf("%d", e.Version),
+			strconv.Itoa(e.Version),
 		}
 	}
 
