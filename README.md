@@ -38,7 +38,7 @@ Drop a `.env` with your token into a directory. Run. Done.
 
 
 
-**[Manual (LLM usage guide)](docs/manual.md)** · **[LLM tuning notes](docs/llm-tuning.md)**
+**[Manual (LLM usage guide)](docs/manual.md)** · **[LLM tuning notes](docs/llm-tuning.md)** · **[Testing guide](docs/testing.md)**
 
 ## Install
 
