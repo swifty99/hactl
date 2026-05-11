@@ -89,6 +89,16 @@ jobs:
         env:
           HACTL_HA_IMAGE: ${{ steps.image.outputs.ha_image }}
 
+      - name: Detect HA version
+        if: always()
+        run: |
+          img="${{ steps.image.outputs.ha_image }}"
+          ha_full=$(docker inspect "${img}" --format '{{index .Config.Labels "io.hass.version"}}' 2>/dev/null || true)
+          if [ -z "${ha_full}" ]; then
+            ha_full=$(echo "${img}" | sed 's|.*/home-assistant:||')
+          fi
+          echo "::notice title=HA Version (${img##*:})::Home Assistant ${ha_full}"
+
   govulncheck:
     name: Vulnerability Check
     runs-on: ubuntu-latest

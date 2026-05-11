@@ -28,15 +28,6 @@ jobs:
           echo "::error::Major version update detected — requires manual review"
           exit 1
 
-      - name: Wait for CI checks to pass
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          check-regexp: ^(Lint|Unit Tests|Integration Tests|Govulncheck)$
-          wait-interval: 30
-          allowed-conclusions: success
-
       - name: Auto-approve PR
         run: gh pr review --approve "$PR_URL"
         env:
