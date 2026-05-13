@@ -36,6 +36,9 @@ var (
 	haURL      string
 	compURL    string
 	composeDir string
+	haToken    string // long-lived HA token for E2E tests
+	instanceDir string // temp dir with .env for hactl CLI E2E tests
+	hactlBin   string // path to built hactl binary
 )
 
 func TestMain(m *testing.M) {
@@ -84,8 +87,9 @@ func TestMain(m *testing.M) {
 	slog.Info("companion-test: HA ready")
 
 	// Onboard HA
-	if _, err := completeOnboarding(ctx, haURL); err != nil {
-		slog.Error("companion-test: onboarding failed", "error", err)
+	var onboardErr error
+	if haToken, onboardErr = completeOnboarding(ctx, haURL); onboardErr != nil {
+		slog.Error("companion-test: onboarding failed", "error", onboardErr)
 		composeDown()
 		os.Exit(1)
 	}
@@ -107,6 +111,26 @@ func TestMain(m *testing.M) {
 	// Create client
 	testClient = companion.New(compURL, companionToken)
 
+	// Build hactl binary for E2E CLI tests
+	var buildErr error
+	hactlBin, buildErr = buildHactl()
+	if buildErr != nil {
+		slog.Error("companion-test: failed to build hactl binary", "error", buildErr)
+		composeDown()
+		os.Exit(1)
+	}
+	slog.Info("companion-test: hactl binary built", "path", hactlBin)
+
+	// Create instanceDir with .env for hactl CLI E2E tests
+	var instErr error
+	instanceDir, instErr = createE2EInstanceDir(haURL, haToken, compURL, companionToken)
+	if instErr != nil {
+		slog.Error("companion-test: failed to create E2E instance dir", "error", instErr)
+		composeDown()
+		os.Exit(1)
+	}
+	slog.Info("companion-test: E2E instance dir created", "path", instanceDir)
+
 	// Seed config files for CRUD tests
 	if err := seedConfigFiles(); err != nil {
 		slog.Error("companion-test: seeding config files failed", "error", err)
@@ -119,6 +143,12 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	// Tear down
+	if instanceDir != "" {
+		_ = os.RemoveAll(instanceDir)
+	}
+	if hactlBin != "" {
+		_ = os.Remove(hactlBin)
+	}
 	composeDown()
 	os.Exit(code)
 }
@@ -450,4 +480,46 @@ func doJSONPost(ctx context.Context, targetURL, token string, body any) ([]byte,
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(data))
 	}
 	return data, nil
+}
+
+// buildHactl compiles the hactl binary from source into a temp file.
+// Returns the path to the binary.
+func buildHactl() (string, error) {
+	f, err := os.CreateTemp("", "hactl-e2e-*")
+	if err != nil {
+		return "", fmt.Errorf("creating temp file for binary: %w", err)
+	}
+	binPath := f.Name()
+	f.Close()
+
+	slog.Info("companion-test: building hactl binary", "output", binPath)
+	cmd := exec.Command("go", "build", "-o", binPath, "github.com/swifty99/hactl/cmd/hactl")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		_ = os.Remove(binPath)
+		return "", fmt.Errorf("go build hactl: %w", err)
+	}
+	return binPath, nil
+}
+
+// createE2EInstanceDir writes a .env with HA + companion credentials for CLI E2E tests.
+func createE2EInstanceDir(haBaseURL, haAccessToken, companionBaseURL, compToken string) (string, error) {
+	dir, err := os.MkdirTemp("", "hactl-e2e-instance-*")
+	if err != nil {
+		return "", fmt.Errorf("creating E2E instance dir: %w", err)
+	}
+	env := fmt.Sprintf(
+		"HA_URL=%s\nHA_TOKEN=%s\nCOMPANION_URL=%s\nCOMPANION_TOKEN=%s\n",
+		haBaseURL, haAccessToken, companionBaseURL, compToken,
+	)
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(env), 0o600); err != nil {
+		_ = os.RemoveAll(dir)
+		return "", fmt.Errorf("writing .env: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "cache"), 0o750); err != nil {
+		_ = os.RemoveAll(dir)
+		return "", fmt.Errorf("creating cache dir: %w", err)
+	}
+	return dir, nil
 }
