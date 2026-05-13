@@ -68,6 +68,7 @@ func TestDeduplicateLogs(t *testing.T) {
 	}
 	if zhaGroup == nil {
 		t.Fatal("expected a zha group in deduped results")
+		return
 	}
 	// Two entries match exactly (same thread), the third has different thread but same normalized message
 	if zhaGroup.Count < 2 {
