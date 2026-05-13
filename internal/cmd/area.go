@@ -15,8 +15,8 @@ import (
 
 var areaCmd = &cobra.Command{
 	Use:   "area",
-	Short: "Discover areas (rooms)",
-	Long:  "List Home Assistant areas (rooms) and their assignments.",
+	Short: "Manage areas (rooms)",
+	Long:  "List, create, and delete Home Assistant areas (rooms).",
 }
 
 var areaLsCmd = &cobra.Command{
@@ -28,8 +28,35 @@ var areaLsCmd = &cobra.Command{
 	},
 }
 
+var flagAreaIcon string
+var flagAreaFloor string
+var flagAreaConfirm bool
+
+var areaCreateCmd = &cobra.Command{
+	Use:   "create <name>",
+	Short: "Create a new area",
+	Long:  "Create an area (room) in the Home Assistant area registry.",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runAreaCreate(cmd.Context(), cmd.OutOrStdout(), args[0])
+	},
+}
+
+var areaDeleteCmd = &cobra.Command{
+	Use:   "delete <area_id>",
+	Short: "Delete an area (dry-run by default)",
+	Long:  "Delete an area from the Home Assistant area registry. Use --confirm to apply.",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runAreaDelete(cmd.Context(), cmd.OutOrStdout(), args[0])
+	},
+}
+
 func init() {
-	areaCmd.AddCommand(areaLsCmd)
+	areaCreateCmd.Flags().StringVar(&flagAreaIcon, "icon", "", "area icon (e.g. mdi:sofa)")
+	areaCreateCmd.Flags().StringVar(&flagAreaFloor, "floor", "", "floor ID to assign")
+	areaDeleteCmd.Flags().BoolVar(&flagAreaConfirm, "confirm", false, "actually delete (default is dry-run)")
+	areaCmd.AddCommand(areaLsCmd, areaCreateCmd, areaDeleteCmd)
 	rootCmd.AddCommand(areaCmd)
 }
 
@@ -105,4 +132,52 @@ func runAreaLs(ctx context.Context, w io.Writer) error {
 
 func joinStrings(s []string) string {
 	return strings.Join(s, ", ")
+}
+
+func runAreaCreate(ctx context.Context, w io.Writer, name string) error {
+	cfg, err := config.Load(flagDir)
+	if err != nil {
+		return err
+	}
+
+	ws := haapi.NewWSClient(cfg.URL, cfg.Token)
+	if connErr := ws.Connect(ctx); connErr != nil {
+		return fmt.Errorf("connecting to HA: %w", connErr)
+	}
+	defer func() { _ = ws.Close() }()
+
+	entry, err := ws.AreaRegistryCreate(ctx, name, flagAreaIcon, flagAreaFloor)
+	if err != nil {
+		return fmt.Errorf("creating area: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(w, "created area %q (id=%s)\n", entry.Name, entry.AreaID)
+	return nil
+}
+
+func runAreaDelete(ctx context.Context, w io.Writer, areaID string) error {
+	if !flagAreaConfirm {
+		_, _ = fmt.Fprintln(w, "dry-run: would delete area")
+		_, _ = fmt.Fprintf(w, "  area_id: %s\n", areaID)
+		_, _ = fmt.Fprintln(w, "use --confirm to apply")
+		return nil
+	}
+
+	cfg, err := config.Load(flagDir)
+	if err != nil {
+		return err
+	}
+
+	ws := haapi.NewWSClient(cfg.URL, cfg.Token)
+	if connErr := ws.Connect(ctx); connErr != nil {
+		return fmt.Errorf("connecting to HA: %w", connErr)
+	}
+	defer func() { _ = ws.Close() }()
+
+	if err := ws.AreaRegistryDelete(ctx, areaID); err != nil {
+		return fmt.Errorf("deleting area: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(w, "deleted area %q\n", areaID)
+	return nil
 }

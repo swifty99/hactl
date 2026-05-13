@@ -112,3 +112,29 @@ type AutomationCreateResponse struct {
 type ConfigDeleteResponse struct {
 	Status string `json:"status"`
 }
+
+// HelperDefinition represents a helper entity definition.
+type HelperDefinition struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Domain string `json:"domain"`
+	Icon   string `json:"icon,omitempty"`
+}
+
+// HelpersResponse is the response from GET /v1/config/helpers.
+type HelpersResponse struct {
+	Helpers []HelperDefinition `json:"helpers"`
+}
+
+// HelperResponse is the response from GET /v1/config/helper.
+type HelperResponse struct {
+	ID      string `json:"id"`
+	Domain  string `json:"domain"`
+	Content string `json:"content"`
+}
+
+// HelperCreateResponse is the response from POST /v1/config/helper.
+type HelperCreateResponse struct {
+	Status string `json:"status"`
+	ID     string `json:"id"`
+}

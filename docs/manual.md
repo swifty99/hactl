@@ -59,6 +59,17 @@ trc:a7  automation.climate_schedule  2026-04-16 09:42  FAIL
 ```
 `X` = skipped. Stable trace IDs persist in `cache/ids.json` for follow-up calls.
 
+### Automations — create & delete
+
+```bash
+hactl auto create -f new_auto.yaml              # dry-run (default, no write)
+hactl auto create -f new_auto.yaml --confirm    # create via companion + reload
+hactl auto delete climate_schedule              # dry-run
+hactl auto delete climate_schedule --confirm    # delete via companion + reload
+```
+
+Requires hactl-companion. YAML file format matches HA automation config (id, alias, trigger, condition, action).
+
 ### Scripts
 
 ```bash
@@ -71,6 +82,17 @@ hactl script run kino_start        # execute script via script.turn_on
 ```
 
 `state` column: `off` = idle, `on` = currently running.
+
+### Scripts — create & delete
+
+```bash
+hactl script create -f new_script.yaml             # dry-run
+hactl script create -f new_script.yaml --confirm   # create via companion + reload
+hactl script delete kino_start                     # dry-run
+hactl script delete kino_start --confirm           # delete via companion + reload
+```
+
+Requires hactl-companion. YAML file format matches HA scripts.yaml (top-level key = script ID).
 
 ### Entities & history
 
@@ -98,7 +120,14 @@ hactl label ls                            # label_id, name, color, description
 hactl label create "Energy" --color red --icon mdi:flash --description "Power consumers"
 
 hactl area ls                             # area_id, name, floor (name), labels
+hactl area create "Kitchen" --icon mdi:silverware-fork  # create immediately (no dry-run)
+hactl area delete kitchen --confirm       # delete (dry-run without --confirm)
+
 hactl floor ls                            # floor_id, name, level, icon
+hactl floor create "Ground Floor" --icon mdi:home-floor-0 --level 0  # create immediately
+hactl floor delete ground_floor --confirm # delete (dry-run without --confirm)
+
+hactl label delete old-label --confirm    # delete a label (dry-run without --confirm)
 
 hactl ent set-label sensor.wp_vl energy   # assign label(s) to entity (by ID or name)
 hactl ent set-area  sensor.wp_vl living_room  # set entity area (area_id)
@@ -117,6 +146,32 @@ hactl rollback climate_schedule                        # undo specific automatio
 ```
 
 **Safety:** `apply` without `--confirm` is always a dry-run. Backups are created automatically in `backups/`. Writes go through HA's Config API; `check_config` validates before reload.
+
+### Templates — create & delete
+
+```bash
+hactl tpl create -f sensor_tpl.yaml                  # dry-run
+hactl tpl create -f sensor_tpl.yaml --confirm        # create via companion + reload
+hactl tpl create -f binary_tpl.yaml --domain binary_sensor --confirm  # non-default domain
+hactl tpl delete my_template_uid                     # dry-run
+hactl tpl delete my_template_uid --confirm           # delete via companion + reload
+```
+
+Requires hactl-companion. Default domain is `sensor`. Supported: sensor, binary_sensor.
+
+### Helpers
+
+```bash
+hactl helper ls                                      # list all helpers
+hactl helper ls --domain input_boolean               # filter by domain
+hactl helper show guest_mode                         # show helper YAML definition
+hactl helper create input_boolean -f toggle.yaml             # dry-run
+hactl helper create input_boolean -f toggle.yaml --confirm   # create via companion + reload
+hactl helper delete guest_mode                       # dry-run
+hactl helper delete guest_mode --confirm             # delete via companion + reload
+```
+
+Supported domains: input_boolean, input_number, input_select, input_text, input_datetime, counter, timer, schedule. Requires hactl-companion.
 
 ### Templates & services
 
@@ -313,6 +368,21 @@ hactl ent ls --area <area> --domain sensor
 hactl auto diff <id> -f new.yaml
 hactl auto apply <id> -f new.yaml --confirm
 hactl auto show <id>
+```
+
+### "Create a new automation / script / helper"
+```
+hactl auto create -f auto.yaml              # dry-run preview
+hactl auto create -f auto.yaml --confirm    # create + reload
+hactl script create -f script.yaml --confirm
+hactl helper create input_boolean -f toggle.yaml --confirm
+```
+
+### "Delete an automation / helper"
+```
+hactl auto delete <id>                      # dry-run preview
+hactl auto delete <id> --confirm            # delete + reload
+hactl helper delete <id> --confirm
 ```
 
 ### "Organize entities with labels"

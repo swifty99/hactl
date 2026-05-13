@@ -319,6 +319,72 @@ func (ws *WSClient) LabelRegistryCreate(ctx context.Context, name, color, icon, 
 	return &entry, nil
 }
 
+// LabelRegistryDelete deletes a label from the HA label registry.
+// WS command: config/label_registry/delete
+func (ws *WSClient) LabelRegistryDelete(ctx context.Context, labelID string) error {
+	params := map[string]any{"label_id": labelID}
+	_, err := ws.sendCommand(ctx, "config/label_registry/delete", params)
+	return err
+}
+
+// AreaRegistryCreate creates a new area in the HA area registry.
+// WS command: config/area_registry/create
+func (ws *WSClient) AreaRegistryCreate(ctx context.Context, name, icon string, floorID string) (*AreaEntry, error) {
+	params := map[string]any{"name": name}
+	if icon != "" {
+		params["icon"] = icon
+	}
+	if floorID != "" {
+		params["floor_id"] = floorID
+	}
+	result, err := ws.sendCommand(ctx, "config/area_registry/create", params)
+	if err != nil {
+		return nil, err
+	}
+	var entry AreaEntry
+	if err := json.Unmarshal(result, &entry); err != nil {
+		return nil, fmt.Errorf("parsing created area: %w", err)
+	}
+	return &entry, nil
+}
+
+// AreaRegistryDelete deletes an area from the HA area registry.
+// WS command: config/area_registry/delete
+func (ws *WSClient) AreaRegistryDelete(ctx context.Context, areaID string) error {
+	params := map[string]any{"area_id": areaID}
+	_, err := ws.sendCommand(ctx, "config/area_registry/delete", params)
+	return err
+}
+
+// FloorRegistryCreate creates a new floor in the HA floor registry.
+// WS command: config/floor_registry/create
+func (ws *WSClient) FloorRegistryCreate(ctx context.Context, name, icon string, level *int) (*FloorEntry, error) {
+	params := map[string]any{"name": name}
+	if icon != "" {
+		params["icon"] = icon
+	}
+	if level != nil {
+		params["level"] = *level
+	}
+	result, err := ws.sendCommand(ctx, "config/floor_registry/create", params)
+	if err != nil {
+		return nil, err
+	}
+	var entry FloorEntry
+	if err := json.Unmarshal(result, &entry); err != nil {
+		return nil, fmt.Errorf("parsing created floor: %w", err)
+	}
+	return &entry, nil
+}
+
+// FloorRegistryDelete deletes a floor from the HA floor registry.
+// WS command: config/floor_registry/delete
+func (ws *WSClient) FloorRegistryDelete(ctx context.Context, floorID string) error {
+	params := map[string]any{"floor_id": floorID}
+	_, err := ws.sendCommand(ctx, "config/floor_registry/delete", params)
+	return err
+}
+
 // DashboardList returns all Lovelace dashboard entries.
 // WS command: lovelace/dashboards/list
 func (ws *WSClient) DashboardList(ctx context.Context) ([]LovelaceDashboard, error) {

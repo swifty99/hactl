@@ -3,9 +3,11 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -22,6 +24,8 @@ import (
 var flagScriptPattern string
 var flagScriptLabel string
 var flagScriptFailing bool
+var flagScriptFile string
+var flagScriptConfirm bool
 
 var scriptCmd = &cobra.Command{
 	Use:   "script",
@@ -58,11 +62,33 @@ var scriptRunCmd = &cobra.Command{
 	},
 }
 
+var scriptCreateCmd = &cobra.Command{
+	Use:   "create",
+	Short: "Create a new script from YAML (dry-run by default)",
+	Long:  "Create a new script from a local YAML file via the companion. Use --confirm to apply.",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runScriptCreate(cmd.Context(), cmd.OutOrStdout())
+	},
+}
+
+var scriptDeleteCmd = &cobra.Command{
+	Use:   "delete <id>",
+	Short: "Delete a script (dry-run by default)",
+	Long:  "Delete a script from HA via the companion. Use --confirm to apply.",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runScriptDelete(cmd.Context(), cmd.OutOrStdout(), args[0])
+	},
+}
+
 func init() {
 	scriptLsCmd.Flags().StringVar(&flagScriptPattern, "pattern", "", "filter by name (substring or glob, e.g. kino)")
 	scriptLsCmd.Flags().StringVar(&flagScriptLabel, "label", "", "filter scripts by label (substring, e.g. ess)")
 	scriptLsCmd.Flags().BoolVar(&flagScriptFailing, "failing", false, "show only scripts with recent errors")
-	scriptCmd.AddCommand(scriptLsCmd, scriptShowCmd, scriptRunCmd)
+	scriptCreateCmd.Flags().StringVarP(&flagScriptFile, "file", "f", "", "local YAML file for the new script")
+	scriptCreateCmd.Flags().BoolVar(&flagScriptConfirm, "confirm", false, "actually create (default is dry-run)")
+	scriptDeleteCmd.Flags().BoolVar(&flagScriptConfirm, "confirm", false, "actually delete (default is dry-run)")
+	scriptCmd.AddCommand(scriptLsCmd, scriptShowCmd, scriptRunCmd, scriptCreateCmd, scriptDeleteCmd)
 	rootCmd.AddCommand(scriptCmd)
 }
 
@@ -369,5 +395,59 @@ func runScriptRun(ctx context.Context, w io.Writer, scriptID string) error {
 	}
 
 	_, _ = fmt.Fprintf(w, "executed %s\n", entityID)
+	return nil
+}
+
+func runScriptCreate(ctx context.Context, w io.Writer) error {
+	if flagScriptFile == "" {
+		return errors.New("--file / -f is required for create")
+	}
+
+	data, err := os.ReadFile(flagScriptFile) //nolint:gosec // file path provided by user via CLI flag
+	if err != nil {
+		return fmt.Errorf("reading file: %w", err)
+	}
+	content := string(data)
+
+	if !flagScriptConfirm {
+		_, _ = fmt.Fprintln(w, "dry-run: would create script")
+		_, _ = fmt.Fprintf(w, "  file: %s\n", flagScriptFile)
+		_, _ = fmt.Fprintf(w, "  size: %d bytes\n", len(data))
+		_, _ = fmt.Fprintln(w, "use --confirm to apply")
+		return nil
+	}
+
+	cc, err := connectCompanion(ctx)
+	if err != nil {
+		return err
+	}
+
+	resp, err := cc.CreateScriptDef(ctx, content)
+	if err != nil {
+		return fmt.Errorf("creating script: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(w, "created script %q\n", resp.ID)
+	return nil
+}
+
+func runScriptDelete(ctx context.Context, w io.Writer, scriptID string) error {
+	if !flagScriptConfirm {
+		_, _ = fmt.Fprintln(w, "dry-run: would delete script")
+		_, _ = fmt.Fprintf(w, "  id: %s\n", scriptID)
+		_, _ = fmt.Fprintln(w, "use --confirm to apply")
+		return nil
+	}
+
+	cc, err := connectCompanion(ctx)
+	if err != nil {
+		return err
+	}
+
+	if _, err := cc.DeleteScriptDef(ctx, scriptID); err != nil {
+		return fmt.Errorf("deleting script: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(w, "deleted script %q\n", scriptID)
 	return nil
 }

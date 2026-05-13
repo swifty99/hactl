@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/swifty99/hactl/internal/companion"
 	"github.com/swifty99/hactl/internal/config"
 	"github.com/swifty99/hactl/internal/format"
 	"github.com/swifty99/hactl/internal/haapi"
@@ -72,6 +74,25 @@ var autoApplyCmd = &cobra.Command{
 	},
 }
 
+var autoCreateCmd = &cobra.Command{
+	Use:   "create",
+	Short: "Create a new automation from YAML (dry-run by default)",
+	Long:  "Create a new automation from a local YAML file via the companion. Use --confirm to apply.",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runAutoCreate(cmd.Context(), cmd.OutOrStdout())
+	},
+}
+
+var autoDeleteCmd = &cobra.Command{
+	Use:   "delete <id>",
+	Short: "Delete an automation (dry-run by default)",
+	Long:  "Delete an automation from HA via the companion. Use --confirm to apply.",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runAutoDelete(cmd.Context(), cmd.OutOrStdout(), args[0])
+	},
+}
+
 func init() {
 	autoLsCmd.Flags().BoolVar(&flagAutoFailing, "failing", false, "show only automations with recent errors")
 	autoLsCmd.Flags().StringVar(&flagAutoPattern, "pattern", "", "filter by name (substring or glob, e.g. ess_*)")
@@ -79,7 +100,10 @@ func init() {
 	autoDiffCmd.Flags().StringVarP(&flagAutoFile, "file", "f", "", "local YAML file to diff/apply")
 	autoApplyCmd.Flags().StringVarP(&flagAutoFile, "file", "f", "", "local YAML file to apply")
 	autoApplyCmd.Flags().BoolVar(&flagAutoConfirm, "confirm", false, "actually write + reload (default is dry-run)")
-	autoCmd.AddCommand(autoLsCmd, autoShowCmd, autoDiffCmd, autoApplyCmd)
+	autoCreateCmd.Flags().StringVarP(&flagAutoFile, "file", "f", "", "local YAML file for the new automation")
+	autoCreateCmd.Flags().BoolVar(&flagAutoConfirm, "confirm", false, "actually create (default is dry-run)")
+	autoDeleteCmd.Flags().BoolVar(&flagAutoConfirm, "confirm", false, "actually delete (default is dry-run)")
+	autoCmd.AddCommand(autoLsCmd, autoShowCmd, autoDiffCmd, autoApplyCmd, autoCreateCmd, autoDeleteCmd)
 	rootCmd.AddCommand(autoCmd)
 }
 
@@ -579,4 +603,84 @@ func runAutoApply(ctx context.Context, w io.Writer, autoID string) error {
 		_, _ = fmt.Fprintf(w, "reload:  ok\n")
 	}
 	return nil
+}
+
+func runAutoCreate(ctx context.Context, w io.Writer) error {
+	if flagAutoFile == "" {
+		return errors.New("--file / -f is required for create")
+	}
+
+	data, err := os.ReadFile(flagAutoFile) //nolint:gosec // file path provided by user via CLI flag
+	if err != nil {
+		return fmt.Errorf("reading file: %w", err)
+	}
+	content := string(data)
+
+	if !flagAutoConfirm {
+		_, _ = fmt.Fprintln(w, "dry-run: would create automation")
+		_, _ = fmt.Fprintf(w, "  file: %s\n", flagAutoFile)
+		_, _ = fmt.Fprintf(w, "  size: %d bytes\n", len(data))
+		_, _ = fmt.Fprintln(w, "use --confirm to apply")
+		return nil
+	}
+
+	cc, err := connectCompanion(ctx)
+	if err != nil {
+		return err
+	}
+
+	resp, err := cc.CreateAutomationDef(ctx, content)
+	if err != nil {
+		return fmt.Errorf("creating automation: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(w, "created automation %q\n", resp.ID)
+	return nil
+}
+
+func runAutoDelete(ctx context.Context, w io.Writer, autoID string) error {
+	if !flagAutoConfirm {
+		_, _ = fmt.Fprintln(w, "dry-run: would delete automation")
+		_, _ = fmt.Fprintf(w, "  id: %s\n", autoID)
+		_, _ = fmt.Fprintln(w, "use --confirm to apply")
+		return nil
+	}
+
+	cc, err := connectCompanion(ctx)
+	if err != nil {
+		return err
+	}
+
+	if _, err := cc.DeleteAutomationDef(ctx, autoID); err != nil {
+		return fmt.Errorf("deleting automation: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(w, "deleted automation %q\n", autoID)
+	return nil
+}
+
+// connectCompanion discovers and connects to the hactl-companion.
+func connectCompanion(ctx context.Context) (*companion.Client, error) {
+	cfg, err := config.Load(flagDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var wsClient *haapi.WSClient
+	ws := haapi.NewWSClient(cfg.URL, cfg.Token)
+	if connectErr := ws.Connect(ctx); connectErr != nil {
+		slog.Debug("could not connect WebSocket for companion discovery", "error", connectErr)
+	} else {
+		wsClient = ws
+		// NOTE: we intentionally don't defer ws.Close() here because the caller
+		// may need the companion client longer. The WS connection is lightweight.
+		defer func() { _ = ws.Close() }()
+	}
+
+	companionURL, err := companion.Discover(ctx, cfg, wsClient)
+	if err != nil {
+		return nil, fmt.Errorf("companion discovery: %w", err)
+	}
+
+	return companion.New(companionURL, cfg.Token), nil
 }

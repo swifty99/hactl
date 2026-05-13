@@ -17,6 +17,7 @@ import (
 var flagLabelColor string
 var flagLabelIcon string
 var flagLabelDesc string
+var flagLabelConfirm bool
 
 var labelCmd = &cobra.Command{
 	Use:   "label",
@@ -43,11 +44,22 @@ var labelCreateCmd = &cobra.Command{
 	},
 }
 
+var labelDeleteCmd = &cobra.Command{
+	Use:   "delete <label_id>",
+	Short: "Delete a label (dry-run by default)",
+	Long:  "Delete a label from the Home Assistant label registry. Use --confirm to apply.",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runLabelDelete(cmd.Context(), cmd.OutOrStdout(), args[0])
+	},
+}
+
 func init() {
 	labelCreateCmd.Flags().StringVar(&flagLabelColor, "color", "", "label color (e.g. red, blue, #ff0000)")
 	labelCreateCmd.Flags().StringVar(&flagLabelIcon, "icon", "", "label icon (e.g. mdi:flash)")
 	labelCreateCmd.Flags().StringVar(&flagLabelDesc, "description", "", "label description")
-	labelCmd.AddCommand(labelLsCmd, labelCreateCmd)
+	labelDeleteCmd.Flags().BoolVar(&flagLabelConfirm, "confirm", false, "actually delete (default is dry-run)")
+	labelCmd.AddCommand(labelLsCmd, labelCreateCmd, labelDeleteCmd)
 	rootCmd.AddCommand(labelCmd)
 }
 
@@ -112,6 +124,33 @@ func runLabelCreate(ctx context.Context, w io.Writer, name string) error {
 	}
 
 	_, _ = fmt.Fprintf(w, "created label %q (id=%s)\n", entry.Name, entry.LabelID)
+	return nil
+}
+
+func runLabelDelete(ctx context.Context, w io.Writer, labelID string) error {
+	if !flagLabelConfirm {
+		_, _ = fmt.Fprintln(w, "dry-run: would delete label")
+		_, _ = fmt.Fprintf(w, "  label_id: %s\n", labelID)
+		_, _ = fmt.Fprintln(w, "use --confirm to apply")
+		return nil
+	}
+
+	cfg, err := config.Load(flagDir)
+	if err != nil {
+		return err
+	}
+
+	ws := haapi.NewWSClient(cfg.URL, cfg.Token)
+	if connErr := ws.Connect(ctx); connErr != nil {
+		return fmt.Errorf("connecting to HA: %w", connErr)
+	}
+	defer func() { _ = ws.Close() }()
+
+	if err := ws.LabelRegistryDelete(ctx, labelID); err != nil {
+		return fmt.Errorf("deleting label: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(w, "deleted label %q\n", labelID)
 	return nil
 }
 

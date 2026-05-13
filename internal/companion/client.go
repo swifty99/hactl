@@ -277,6 +277,72 @@ func (c *Client) DeleteAutomationDef(ctx context.Context, id string) (*ConfigDel
 	return &r, json.Unmarshal(data, &r)
 }
 
+// --- Helper CRUD ---
+
+// ListHelpers calls GET /v1/config/helpers[?domain=<domain>].
+func (c *Client) ListHelpers(ctx context.Context, domain string) (*HelpersResponse, error) {
+	q := url.Values{}
+	if domain != "" {
+		q.Set("domain", domain)
+	}
+	data, err := c.doGet(ctx, "/v1/config/helpers", q)
+	if err != nil {
+		return nil, err
+	}
+	var r HelpersResponse
+	return &r, json.Unmarshal(data, &r)
+}
+
+// GetHelper calls GET /v1/config/helper?id=<id>.
+func (c *Client) GetHelper(ctx context.Context, id string) (*HelperResponse, error) {
+	q := url.Values{"id": {id}}
+	data, err := c.doGet(ctx, "/v1/config/helper", q)
+	if err != nil {
+		return nil, err
+	}
+	var r HelperResponse
+	return &r, json.Unmarshal(data, &r)
+}
+
+// CreateHelper calls POST /v1/config/helper?domain=<domain>.
+func (c *Client) CreateHelper(ctx context.Context, content, domain string) (*HelperCreateResponse, error) {
+	q := url.Values{"domain": {domain}}
+	data, err := c.doPostBody(ctx, "/v1/config/helper", q, content)
+	if err != nil {
+		return nil, err
+	}
+	var r HelperCreateResponse
+	return &r, json.Unmarshal(data, &r)
+}
+
+// UpdateHelper calls PUT /v1/config/helper?id=<id>.
+func (c *Client) UpdateHelper(ctx context.Context, id, content string) (*ConfigDeleteResponse, error) {
+	q := url.Values{"id": {id}}
+	data, err := c.doPut(ctx, "/v1/config/helper", q, content)
+	if err != nil {
+		return nil, err
+	}
+	var r ConfigDeleteResponse
+	return &r, json.Unmarshal(data, &r)
+}
+
+// DeleteHelper calls DELETE /v1/config/helper?id=<id>.
+func (c *Client) DeleteHelper(ctx context.Context, id string) (*ConfigDeleteResponse, error) {
+	q := url.Values{"id": {id}}
+	data, err := c.doDelete(ctx, "/v1/config/helper", q)
+	if err != nil {
+		return nil, err
+	}
+	var r ConfigDeleteResponse
+	return &r, json.Unmarshal(data, &r)
+}
+
+// ReloadDomain calls POST /v1/ha/reload/<domain>.
+func (c *Client) ReloadDomain(ctx context.Context, domain string) error {
+	_, err := c.doPostBody(ctx, "/v1/ha/reload/"+domain, nil, "")
+	return err
+}
+
 func (c *Client) doGet(ctx context.Context, path string, query url.Values) ([]byte, error) {
 	u := c.baseURL + path
 	if query != nil {
