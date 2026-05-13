@@ -11,11 +11,12 @@ import (
 
 // Config holds the resolved instance configuration.
 type Config struct {
-	Dir          string // resolved instance directory (absolute path)
-	URL          string // HA_URL from .env (no trailing slash)
-	Token        string // HA_TOKEN from .env
-	TZ           string // optional timezone, defaults to ""
-	CompanionURL string // optional COMPANION_URL from .env (no trailing slash)
+	Dir            string // resolved instance directory (absolute path)
+	URL            string // HA_URL from .env (no trailing slash)
+	Token          string // HA_TOKEN from .env
+	TZ             string // optional timezone, defaults to ""
+	CompanionURL   string // optional COMPANION_URL from .env (no trailing slash)
+	CompanionToken string // optional COMPANION_TOKEN from .env; falls back to Token
 }
 
 // Load resolves the instance directory and loads .env.
@@ -44,6 +45,10 @@ func Load(dirFlag string) (*Config, error) {
 	token := env["HA_TOKEN"]
 	tz := env["TZ"]
 	companionURL := strings.TrimRight(env["COMPANION_URL"], "/")
+	companionToken := env["COMPANION_TOKEN"]
+	if companionToken == "" {
+		companionToken = token // fall back to the HA token
+	}
 
 	if url == "" {
 		return nil, fmt.Errorf("no HA_URL in .env at %s", envPath)
@@ -53,11 +58,12 @@ func Load(dirFlag string) (*Config, error) {
 	}
 
 	return &Config{
-		Dir:          dir,
-		URL:          url,
-		Token:        token,
-		TZ:           tz,
-		CompanionURL: companionURL,
+		Dir:            dir,
+		URL:            url,
+		Token:          token,
+		TZ:             tz,
+		CompanionURL:   companionURL,
+		CompanionToken: companionToken,
 	}, nil
 }
 

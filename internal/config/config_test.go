@@ -144,3 +144,33 @@ func TestLoad_TrailingSlash(t *testing.T) {
 		t.Errorf("URL = %q, want %q (trailing slash should be stripped)", cfg.URL, testHAURL)
 	}
 }
+
+func TestLoad_CompanionToken_Explicit(t *testing.T) {
+	dir := t.TempDir()
+	writeEnv(t, dir, "HA_URL="+testHAURL+"\nHA_TOKEN=hatoken\nCOMPANION_TOKEN=companiontoken\n")
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Token != "hatoken" {
+		t.Errorf("Token = %q, want hatoken", cfg.Token)
+	}
+	if cfg.CompanionToken != "companiontoken" {
+		t.Errorf("CompanionToken = %q, want companiontoken", cfg.CompanionToken)
+	}
+}
+
+func TestLoad_CompanionToken_FallsBackToToken(t *testing.T) {
+	dir := t.TempDir()
+	// No COMPANION_TOKEN — should fall back to HA_TOKEN
+	writeEnv(t, dir, "HA_URL="+testHAURL+"\nHA_TOKEN=hatoken\n")
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.CompanionToken != cfg.Token {
+		t.Errorf("CompanionToken = %q, want it to fall back to Token %q", cfg.CompanionToken, cfg.Token)
+	}
+}

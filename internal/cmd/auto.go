@@ -682,5 +682,5 @@ func connectCompanion(ctx context.Context) (*companion.Client, error) {
 		return nil, fmt.Errorf("companion discovery: %w", err)
 	}
 
-	return companion.New(companionURL, cfg.Token), nil
+	return companion.New(companionURL, cfg.CompanionToken), nil
 }
