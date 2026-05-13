@@ -25,15 +25,15 @@ func runHactlE2E(t *testing.T, args ...string) (string, error) {
 // TestE2EAutoCreateCLI verifies that `hactl auto create --confirm -f <yaml>`
 // calls the companion API and creates an automation.
 func TestE2EAutoCreateCLI(t *testing.T) {
-	content := `- id: e2e_create_test
-  alias: E2E Create Test
-  mode: single
-  trigger:
-    - platform: time
-      at: "06:00:00"
-  condition: []
-  action:
-    - delay: "00:00:01"
+	content := `id: e2e_create_test
+alias: E2E Create Test
+mode: single
+trigger:
+  - platform: time
+    at: "06:00:00"
+condition: []
+action:
+  - delay: "00:00:01"
 `
 	f, err := os.CreateTemp(t.TempDir(), "auto-create-*.yaml")
 	if err != nil {
@@ -60,14 +60,14 @@ func TestE2EAutoDeleteCLI(t *testing.T) {
 
 	// Seed a unique automation via the companion client that we can then delete
 	const autoID = "e2e_delete_target"
-	content := `- id: ` + autoID + `
-  alias: E2E Delete Target
-  mode: single
-  trigger:
-    - platform: time
-      at: "07:00:00"
-  action:
-    - delay: "00:00:01"
+	content := `id: ` + autoID + `
+alias: E2E Delete Target
+mode: single
+trigger:
+  - platform: time
+    at: "07:00:00"
+action:
+  - delay: "00:00:01"
 `
 	if _, err := testClient.CreateAutomationDef(ctx, content); err != nil {
 		t.Fatalf("seeding automation for delete test: %v", err)
